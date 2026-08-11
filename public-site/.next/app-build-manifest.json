@@ -1,0 +1,44 @@
+{
+  "pages": {
+    "/_not-found/page": [
+      "static/chunks/webpack-8658fdbc42bfbbae.js",
+      "static/chunks/fd9d1056-749e5812300142af.js",
+      "static/chunks/117-e5476d4bdcce692a.js",
+      "static/chunks/main-app-aa182567e222bee0.js",
+      "static/chunks/app/_not-found/page-eaa53ae320539b27.js"
+    ],
+    "/layout": [
+      "static/chunks/webpack-8658fdbc42bfbbae.js",
+      "static/chunks/fd9d1056-749e5812300142af.js",
+      "static/chunks/117-e5476d4bdcce692a.js",
+      "static/chunks/main-app-aa182567e222bee0.js",
+      "static/css/a74e9f262055d437.css",
+      "static/chunks/972-fe008c56cc430895.js",
+      "static/chunks/app/layout-0a97209992677ede.js"
+    ],
+    "/medicines/[id]/page": [
+      "static/chunks/webpack-8658fdbc42bfbbae.js",
+      "static/chunks/fd9d1056-749e5812300142af.js",
+      "static/chunks/117-e5476d4bdcce692a.js",
+      "static/chunks/main-app-aa182567e222bee0.js",
+      "static/chunks/972-fe008c56cc430895.js",
+      "static/chunks/app/medicines/[id]/page-22235acc6fa260da.js"
+    ],
+    "/search/page": [
+      "static/chunks/webpack-8658fdbc42bfbbae.js",
+      "static/chunks/fd9d1056-749e5812300142af.js",
+      "static/chunks/117-e5476d4bdcce692a.js",
+      "static/chunks/main-app-aa182567e222bee0.js",
+      "static/chunks/972-fe008c56cc430895.js",
+      "static/chunks/app/search/page-aec62467487d5b80.js"
+    ],
+    "/page": [
+      "static/chunks/webpack-8658fdbc42bfbbae.js",
+      "static/chunks/fd9d1056-749e5812300142af.js",
+      "static/chunks/117-e5476d4bdcce692a.js",
+      "static/chunks/main-app-aa182567e222bee0.js",
+      "static/chunks/972-fe008c56cc430895.js",
+      "static/chunks/app/page-dc447241119144bd.js"
+    ]
+  }
+}
