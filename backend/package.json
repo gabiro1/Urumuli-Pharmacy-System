@@ -10,7 +10,11 @@
     "seed": "node src/database/seeds/seed.js",
     "lint": "eslint src --ext .js",
     "test": "node --test",
-    "test:watch": "node --test --watch"
+    "test:watch": "node --test --watch",
+    "e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "seed:admin": "node src/database/seeds/adminSeed.js",
+    "backup": "powershell -ExecutionPolicy Bypass -File scripts/backup.ps1",
+    "restore": "powershell -ExecutionPolicy Bypass -File scripts/restore.ps1"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

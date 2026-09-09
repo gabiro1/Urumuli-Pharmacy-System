@@ -71,7 +71,6 @@ function PublicNavbar() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  const isLanding = location.pathname === '/'
   const isActive = (path) => location.pathname === path
   const navLinkClass = (path) => `relative px-3 py-2 text-sm font-medium transition-colors duration-300 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-center after:rounded-full after:bg-primary after:transition-transform after:duration-300 after:ease-out ${
     isActive(path)
@@ -94,42 +93,25 @@ function PublicNavbar() {
         <div className="flex h-16 items-center justify-between">
           <Logo />
 
-          {isLanding && (
-            <div className="hidden md:flex items-center gap-2">
-              <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
-              <a href="#tour" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How It Works</a>
-              <Link to="/medicines" className={navLinkClass('/medicines')}>Medicines</Link>
-              <Link to="/services" className={navLinkClass('/services')}>Services</Link>
-              <Link to="/about" className={navLinkClass('/about')}>About</Link>
-              <Link to="/contact" className={navLinkClass('/contact')}>Contact</Link>
-            </div>
-          )}
-
-          {!isLanding && (
-            <div className="hidden md:flex items-center gap-2">
-              <Link to="/" className={navLinkClass('/')}>Home</Link>
-              <Link to="/medicines" className={navLinkClass('/medicines')}>Medicines</Link>
-              <Link to="/services" className={navLinkClass('/services')}>Services</Link>
-              <Link to="/about" className={navLinkClass('/about')}>About</Link>
-              <Link to="/contact" className={navLinkClass('/contact')}>Contact</Link>
-            </div>
-          )}
+          <div className="hidden md:flex items-center gap-2">
+            <Link to="/" className={navLinkClass('/')}>Home</Link>
+            <Link to="/medicines" className={navLinkClass('/medicines')}>Products</Link>
+            <Link to="/services" className={navLinkClass('/services')}>Services</Link>
+            <Link to="/about" className={navLinkClass('/about')}>About</Link>
+            <Link to="/contact" className={navLinkClass('/contact')}>Contact</Link>
+          </div>
 
           <div className="flex items-center gap-3">
             <Link to="/medicines" aria-current={isActive('/medicines') ? 'page' : undefined} className={`relative md:hidden px-2.5 py-1.5 text-sm font-medium transition-colors duration-300 after:absolute after:inset-x-2.5 after:bottom-0 after:h-0.5 after:origin-center after:rounded-full after:bg-primary after:transition-transform after:duration-300 after:ease-out ${isActive('/medicines') ? 'text-foreground after:scale-x-100' : 'text-muted-foreground hover:text-foreground after:scale-x-0'}`}>
-              Medicines
+              Products
             </Link>
             <Link to="/cart" aria-label={`Cart with ${cartCount} items`} className="relative rounded-md p-2 text-muted-foreground transition-colors hover:text-foreground">
               <ShoppingBag className="h-5 w-5" />
               {cartCount > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-center text-[10px] font-bold text-primary-foreground">{cartCount}</span>}
             </Link>
             <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={() => navigate('/patient/login')} className="hidden sm:inline-flex">
-              Patient Portal
-            </Button>
-            <div className="h-5 w-px bg-border hidden sm:block" />
             <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
-              Staff Portal
+              Sign In
             </Button>
           </div>
         </div>

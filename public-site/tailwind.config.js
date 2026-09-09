@@ -4,6 +4,9 @@ export default {
   content: ['./src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Bicyclette', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
       boxShadow: {
         glow: '0 0 40px rgba(16, 185, 129, 0.18)',
       },

@@ -28,9 +28,28 @@ export async function searchMedicines(req, res, next) {
   }
 }
 
+export async function autocompleteMedicines(req, res, next) {
+  try {
+    const suggestions = await inventoryService.autocompleteMedicines(req.query);
+    return sendSuccess(res, suggestions);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getMedicine(req, res, next) {
   try {
     const medicine = await inventoryService.getMedicine(req.params.id);
+    return sendSuccess(res, canViewInternal(req) ? medicine : publicMedicine(medicine));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getMedicineByBarcode(req, res, next) {
+  try {
+    const medicine = await inventoryService.getMedicineByBarcode(req.params.code);
+    if (!medicine) return sendSuccess(res, null, 'No medicine found for barcode');
     return sendSuccess(res, canViewInternal(req) ? medicine : publicMedicine(medicine));
   } catch (error) {
     next(error);
@@ -64,10 +83,55 @@ export async function deleteMedicine(req, res, next) {
   }
 }
 
+export async function archiveMedicine(req, res, next) {
+  try {
+    const medicine = await inventoryService.archiveMedicine(req.params.id);
+    return sendSuccess(res, medicine, 'Product archived successfully');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function uploadProductImage(req, res, next) {
+  try {
+    const product = await inventoryService.uploadProductImage(req.params.id, req.file);
+    return sendSuccess(res, product, 'Product image uploaded successfully');
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function listCategories(req, res, next) {
   try {
     const categories = await inventoryService.listCategories();
     return sendSuccess(res, categories);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createCategory(req, res, next) {
+  try {
+    const category = await inventoryService.createCategory(req.body);
+    return sendCreated(res, category, 'Category created successfully');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateCategory(req, res, next) {
+  try {
+    const category = await inventoryService.updateCategory(req.params.id, req.body);
+    return sendSuccess(res, category, 'Category updated successfully');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteCategory(req, res, next) {
+  try {
+    const category = await inventoryService.deleteCategory(req.params.id);
+    return sendSuccess(res, category, 'Category deleted successfully');
   } catch (error) {
     next(error);
   }
@@ -181,6 +245,18 @@ export async function listStockMovements(req, res, next) {
 export async function adjustStock(req, res, next) {
   try {
     const movement = await inventoryService.adjustStock(req.body, req.user);
+    return sendCreated(res, movement, 'Stock adjusted successfully');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function adjustProductStock(req, res, next) {
+  try {
+    const movement = await inventoryService.adjustStock(
+      { ...req.body, medicineId: req.params.id },
+      req.user
+    );
     return sendCreated(res, movement, 'Stock adjusted successfully');
   } catch (error) {
     next(error);

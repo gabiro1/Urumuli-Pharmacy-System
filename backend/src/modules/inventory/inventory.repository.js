@@ -11,39 +11,41 @@ const medicineFields = `
   m.max_stock_level, m.current_stock, m.reorder_point,
   m.barcode, m.image_url, m.created_at, m.updated_at
   , m.classification, m.pack_size, m.selling_unit, m.availability_status,
-  m.general_warnings, m.approved_information_url, m.otc_review_required
+  m.general_warnings, m.approved_information_url, m.otc_review_required,
+  m.product_type, m.subcategory, m.sku, m.supplier_id, s.name AS supplier_name,
+  m.expiry_date, m.active_ingredients, m.route_of_administration, m.dosage_instructions,
+  m.care_purpose, m.ingredients, m.usage_instructions, m.size_description, m.is_archived
 `;
 
 const sortableColumns = {
   name: 'm.name',
   created_at: 'm.created_at',
   updated_at: 'm.updated_at',
+  updatedAt: 'm.updated_at',
   price: 'm.price',
   current_stock: 'm.current_stock',
   currentStock: 'm.current_stock',
   barcode: 'm.barcode',
   category_name: 'c.name',
   categoryName: 'c.name',
+  expiry_date: 'm.expiry_date',
+  expiryDate: 'm.expiry_date',
 };
 
-function buildMedicineWhere({ search, categoryId, requiresPrescription, isActive, classification, availability, dosageForm }) {
+function buildMedicineWhere({ search, categoryId, requiresPrescription, isActive, classification, availability, dosageForm, productType, stockStatus, expiry, minPrice, maxPrice, brand, supplierId }) {
   const conditions = [];
   const params = [];
+  let hasSearch = false;
   let idx = 1;
 
   if (search) {
+    const tsQuery = `plainto_tsquery('english', $${idx})`;
     conditions.push(`(
-      m.name ILIKE $${idx}
-      OR COALESCE(m.generic_name, '') ILIKE $${idx}
-      OR COALESCE(m.brand_name, '') ILIKE $${idx}
-      OR COALESCE(m.description, '') ILIKE $${idx}
-      OR COALESCE(m.symptoms, '') ILIKE $${idx}
-      OR COALESCE(m.contraindications, '') ILIKE $${idx}
-      OR COALESCE(m.barcode, '') ILIKE $${idx}
-      OR COALESCE(array_to_string(m.tags, ' '), '') ILIKE $${idx}
+      m.search_vector @@ ${tsQuery}
       OR COALESCE(c.name, '') ILIKE $${idx}
     )`);
-    params.push(`%${search}%`);
+    params.push(search);
+    hasSearch = true;
     idx++;
   }
 
@@ -64,30 +66,49 @@ function buildMedicineWhere({ search, categoryId, requiresPrescription, isActive
   if (classification) { conditions.push(`m.classification = $${idx++}`); params.push(classification); }
   if (availability) { conditions.push(`m.availability_status = $${idx++}`); params.push(availability); }
   if (dosageForm) { conditions.push(`m.dosage_form = $${idx++}`); params.push(dosageForm); }
+  if (productType) { conditions.push(`m.product_type = $${idx++}`); params.push(productType); }
+  if (brand) { conditions.push(`m.brand_name ILIKE $${idx++}`); params.push(`%${brand}%`); }
+  if (supplierId) { conditions.push(`m.supplier_id = $${idx++}`); params.push(supplierId); }
+  if (minPrice !== undefined && minPrice !== null) { conditions.push(`m.price >= $${idx++}`); params.push(minPrice); }
+  if (maxPrice !== undefined && maxPrice !== null) { conditions.push(`m.price <= $${idx++}`); params.push(maxPrice); }
+  if (stockStatus === 'OUT_OF_STOCK') conditions.push('m.current_stock = 0');
+  if (stockStatus === 'LOW_STOCK') conditions.push('m.current_stock > 0 AND m.current_stock <= COALESCE(m.reorder_point, m.min_stock_level, 0)');
+  if (stockStatus === 'IN_STOCK') conditions.push('m.current_stock > COALESCE(m.reorder_point, m.min_stock_level, 0)');
+  if (expiry === 'EXPIRED') conditions.push('m.expiry_date < CURRENT_DATE');
+  if (expiry === 'EXPIRING_SOON') conditions.push("m.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '90 days'");
+  if (expiry === 'VALID') conditions.push('(m.expiry_date IS NULL OR m.expiry_date > CURRENT_DATE + INTERVAL \'90 days\')');
 
-  return { conditions, params };
+  return { conditions, params, hasSearch };
 }
 
-export async function listMedicines({ limit, offset, search, categoryId, requiresPrescription, isActive, classification, availability, dosageForm, sortBy = 'name', sortOrder = 'ASC' }) {
-  const { conditions, params } = buildMedicineWhere({ search, categoryId, requiresPrescription, isActive, classification, availability, dosageForm });
+export async function listMedicines({ limit, offset, search, categoryId, requiresPrescription, isActive, classification, availability, dosageForm, productType, stockStatus, expiry, minPrice, maxPrice, brand, supplierId, sortBy = 'name', sortOrder = 'ASC' }) {
+  const { conditions, params, hasSearch } = buildMedicineWhere({ search, categoryId, requiresPrescription, isActive, classification, availability, dosageForm, productType, stockStatus, expiry, minPrice, maxPrice, brand, supplierId });
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const sortColumn = sortableColumns[sortBy] || sortableColumns.name;
   const normalizedSortOrder = sortOrder === 'DESC' ? 'DESC' : 'ASC';
 
+  const relevanceExpr = hasSearch
+    ? `ts_rank_cd(m.search_vector, plainto_tsquery('english', ${JSON.stringify(search)}))`
+    : '0';
+
   const countResult = await queryOne(
     `SELECT COUNT(*)::int AS total
      FROM medicines m
-     LEFT JOIN categories c ON c.id = m.category_id
+     LEFT JOIN categories c ON c.id = m.category_id LEFT JOIN suppliers s ON s.id = m.supplier_id
      ${whereClause}`,
     params
   );
 
+  const orderBy = hasSearch
+    ? `${relevanceExpr} DESC, ${sortColumn} ${normalizedSortOrder}`
+    : `${sortColumn} ${normalizedSortOrder}`;
+
   const rows = await query(
     `SELECT ${medicineFields}
      FROM medicines m
-     LEFT JOIN categories c ON c.id = m.category_id
+     LEFT JOIN categories c ON c.id = m.category_id LEFT JOIN suppliers s ON s.id = m.supplier_id
      ${whereClause}
-     ORDER BY ${sortColumn} ${normalizedSortOrder}
+     ORDER BY ${orderBy}
      LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
     [...params, limit, offset]
   );
@@ -98,13 +119,40 @@ export async function listMedicines({ limit, offset, search, categoryId, require
   };
 }
 
+export async function autocompleteMedicines({ search, limit = 8 }) {
+  if (!search) return [];
+
+  const rows = await query(
+    `SELECT m.id, m.name, m.generic_name, m.brand_name
+     FROM medicines m
+     WHERE m.search_vector @@ plainto_tsquery('english', $1)
+       AND m.is_active = true
+     ORDER BY ts_rank_cd(m.search_vector, plainto_tsquery('english', $1)) DESC,
+              m.name ASC
+     LIMIT $2`,
+    [search, limit]
+  );
+
+  return rows;
+}
+
 export async function findMedicineById(id) {
   return queryOne(
     `SELECT ${medicineFields}
      FROM medicines m
-     LEFT JOIN categories c ON c.id = m.category_id
+     LEFT JOIN categories c ON c.id = m.category_id LEFT JOIN suppliers s ON s.id = m.supplier_id
      WHERE m.id = $1`,
     [id]
+  );
+}
+
+export async function findMedicineByBarcode(barcode) {
+  return queryOne(
+    `SELECT ${medicineFields}
+     FROM medicines m
+     LEFT JOIN categories c ON c.id = m.category_id LEFT JOIN suppliers s ON s.id = m.supplier_id
+     WHERE m.barcode = $1 OR m.sku = $1`,
+    [barcode]
   );
 }
 
@@ -147,6 +195,14 @@ export async function deleteMedicine(id) {
   );
 }
 
+export async function archiveMedicine(id) {
+  return queryOne(
+    `UPDATE medicines SET is_active = false, is_archived = true, archived_at = NOW(), updated_at = NOW()
+     WHERE id = $1 RETURNING *`,
+    [id]
+  );
+}
+
 export async function listCategories() {
   return query(
     `SELECT id, name, slug, parent_id, description, is_active, created_at, updated_at
@@ -154,14 +210,69 @@ export async function listCategories() {
   );
 }
 
+export async function findCategoryById(id) {
+  return queryOne(`SELECT * FROM categories WHERE id = $1`, [id]);
+}
+
+export async function findCategoryBySlug(slug) {
+  return queryOne(`SELECT * FROM categories WHERE slug = $1`, [slug]);
+}
+
+export async function createCategory(data) {
+  const keys = Object.keys(data);
+  const values = Object.values(data);
+  const placeholders = keys.map((_, index) => `$${index + 1}`).join(', ');
+
+  return queryOne(
+    `INSERT INTO categories (${keys.join(', ')})
+     VALUES (${placeholders})
+     RETURNING *`,
+    values
+  );
+}
+
+export async function updateCategory(id, data) {
+  const entries = Object.entries(data).filter(([, value]) => value !== undefined);
+  if (entries.length === 0) return findCategoryById(id);
+
+  const sets = entries.map(([key], index) => `${key} = $${index + 1}`);
+  const values = entries.map(([, value]) => value);
+  values.push(id);
+
+  return queryOne(
+    `UPDATE categories
+     SET ${sets.join(', ')}, updated_at = NOW()
+     WHERE id = $${values.length}
+     RETURNING *`,
+    values
+  );
+}
+
+export async function deleteCategory(id) {
+  return queryOne(`DELETE FROM categories WHERE id = $1 RETURNING *`, [id]);
+}
+
+export async function countProductsByCategory(categoryId) {
+  const result = await queryOne(
+    `SELECT COUNT(*)::int AS total FROM medicines WHERE category_id = $1`,
+    [categoryId]
+  );
+  return result?.total ?? 0;
+}
+
 export async function getInventorySummary() {
   const results = await Promise.all([
-    queryOne(`SELECT COUNT(*)::int AS total FROM medicines WHERE is_active = true`),
     queryOne(
-      `SELECT COUNT(*)::int AS total
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE product_type = 'MEDICINE')::int AS medicines,
+         COUNT(*) FILTER (WHERE product_type = 'PHARMACY_CARE')::int AS pharmacy_care,
+         COUNT(*) FILTER (WHERE current_stock > 0 AND current_stock <= COALESCE(reorder_point, min_stock_level, 0))::int AS low_stock,
+         COUNT(*) FILTER (WHERE current_stock = 0)::int AS out_of_stock,
+         COUNT(*) FILTER (WHERE expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE)::int AS expired,
+         COUNT(*) FILTER (WHERE expiry_date IS NOT NULL AND expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '90 days')::int AS expiring_soon
        FROM medicines
-       WHERE is_active = true
-         AND current_stock <= COALESCE(reorder_point, min_stock_level, 0)`
+       WHERE is_active = true`
     ),
     queryOne(
       `SELECT COUNT(*)::int AS total
@@ -172,12 +283,34 @@ export async function getInventorySummary() {
     queryOne(`SELECT COUNT(*)::int AS total FROM categories WHERE is_active = true`),
   ]);
 
+  const summary = results[0] || {};
   return {
-    medicines: results[0]?.total ?? 0,
-    lowStock: results[1]?.total ?? 0,
-    expiringBatches: results[2]?.total ?? 0,
-    categories: results[3]?.total ?? 0,
+    totalProducts: summary.total ?? 0,
+    medicines: summary.medicines ?? 0,
+    pharmacyCare: summary.pharmacy_care ?? 0,
+    lowStock: summary.low_stock ?? 0,
+    outOfStock: summary.out_of_stock ?? 0,
+    expired: summary.expired ?? 0,
+    expiringSoon: summary.expiring_soon ?? 0,
+    expiringBatches: results[1]?.total ?? 0,
+    categories: results[2]?.total ?? 0,
   };
+}
+
+export async function productHasReferences(id) {
+  const result = await queryOne(
+    `SELECT
+       (SELECT COUNT(*) FROM stock_batches WHERE medicine_id = $1)
+       + (SELECT COUNT(*) FROM stock_movements WHERE medicine_id = $1)
+       + (SELECT COUNT(*) FROM sale_items WHERE medicine_id = $1)
+       + (SELECT COUNT(*) FROM order_items WHERE medicine_id = $1)
+       + (SELECT COUNT(*) FROM prescription_items WHERE medicine_id = $1)
+       + (SELECT COUNT(*) FROM inventory_reservations WHERE medicine_id = $1)
+       + (SELECT COUNT(*) FROM medication_instructions WHERE medicine_id = $1)
+       AS refs`,
+    [id]
+  );
+  return Number(result?.refs ?? 0) > 0;
 }
 
 // ---------------------------------------------------------------- Suppliers
@@ -485,4 +618,3 @@ export async function adjustStock(data, performedBy = null) {
     return result.rows[0];
   });
 }
-

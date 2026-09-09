@@ -16,8 +16,8 @@ function PublicFooter() {
               <span className="text-lg font-bold">Urumuli</span>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-              A digital prescription and communication platform connecting
-              patients with pharmacists for modern healthcare management.
+              A complete pharmacy operations platform for inventory, sales,
+              prescriptions, and patient communication.
             </p>
           </div>
           <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-8">
@@ -39,11 +39,10 @@ function PublicFooter() {
               </ul>
             </div>
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold">Portals</h4>
+              <h4 className="text-sm font-semibold">Account</h4>
               <ul className="space-y-2">
                 {[
-                  { label: 'Patient Portal', path: '/patient/login' },
-                  { label: 'Staff Portal', path: '/login' },
+                  { label: 'Sign In', path: '/login' },
                   { label: 'Patient Registration', path: '/patient/register' },
                   { label: 'Staff Registration', path: '/register' },
                 ].map((item) => (

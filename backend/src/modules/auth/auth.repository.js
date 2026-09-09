@@ -3,7 +3,8 @@ import { query, queryOne, transaction } from '../../config/database.js';
 const userFields = `
   id, email, password_hash, first_name, last_name, phone,
   role, is_active, email_verified_at, last_login_at,
-  password_changed_at, created_at, updated_at
+  password_changed_at, two_factor_enabled, two_factor_secret, two_factor_backup_codes,
+  created_at, updated_at
 `;
 
 const patientSettingsFields = `
@@ -147,6 +148,43 @@ export async function updateLastLogin(id) {
   );
 }
 
+export async function enableTwoFactor(id, secret, backupCodeHashes) {
+  return queryOne(
+    `UPDATE users
+     SET two_factor_enabled = true, two_factor_secret = $1, two_factor_backup_codes = $2
+     WHERE id = $3
+     RETURNING ${userFields}`,
+    [secret, backupCodeHashes || [], id]
+  );
+}
+
+export async function disableTwoFactor(id) {
+  return queryOne(
+    `UPDATE users
+     SET two_factor_enabled = false, two_factor_secret = NULL, two_factor_backup_codes = '{}'
+     WHERE id = $1
+     RETURNING ${userFields}`,
+    [id]
+  );
+}
+
+export async function consumeBackupCode(id, codeHash) {
+  return queryOne(
+    `UPDATE users
+     SET two_factor_backup_codes = array_remove(two_factor_backup_codes, $1)
+     WHERE id = $2 AND $1 = ANY(two_factor_backup_codes)
+     RETURNING ${userFields}`,
+    [codeHash, id]
+  );
+}
+
+export async function findByIdWithSecret(id) {
+  return queryOne(
+    `SELECT ${userFields} FROM users WHERE id = $1`,
+    [id]
+  );
+}
+
 export async function updatePassword(id, passwordHash) {
   return query(
     `UPDATE users SET password_hash = $1, password_changed_at = NOW() WHERE id = $2`,
@@ -254,5 +292,127 @@ export async function updateActiveStatus(id, isActive) {
   return queryOne(
     `UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2 RETURNING ${userFields}`,
     [isActive, id]
+  );
+}
+
+const invitationFields = `
+  id, email, role, full_name, token_hash, invited_by,
+  status, expires_at, accepted_at, revoked_at, accepted_user_id,
+  created_at, updated_at
+`;
+
+export async function createInvitation({ email, role, fullName, tokenHash, invitedBy, expiresAt }) {
+  return queryOne(
+    `INSERT INTO staff_invitations (email, role, full_name, token_hash, invited_by, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING ${invitationFields}`,
+    [email.trim().toLowerCase(), role, fullName || null, tokenHash, invitedBy, expiresAt]
+  );
+}
+
+export async function findInvitationByTokenHash(tokenHash) {
+  return queryOne(
+    `SELECT ${invitationFields} FROM staff_invitations WHERE token_hash = $1`,
+    [tokenHash]
+  );
+}
+
+export async function findPendingInvitationByEmail(email) {
+  return queryOne(
+    `SELECT ${invitationFields} FROM staff_invitations
+     WHERE LOWER(email) = LOWER($1) AND status = 'PENDING'`,
+    [email]
+  );
+}
+
+export async function listInvitations({ page = 1, limit = 20, status } = {}) {
+  const conditions = [];
+  const params = [];
+  let idx = 1;
+
+  if (status) {
+    conditions.push(`status = $${idx++}`);
+    params.push(status);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const offset = (page - 1) * limit;
+
+  const countResult = await queryOne(
+    `SELECT COUNT(*) as total FROM staff_invitations ${where}`,
+    params
+  );
+
+  const rows = await query(
+    `SELECT ${invitationFields} FROM staff_invitations ${where}
+     ORDER BY created_at DESC
+     LIMIT $${idx++} OFFSET $${idx++}`,
+    [...params, limit, offset]
+  );
+
+  return {
+    data: rows,
+    meta: {
+      page,
+      limit,
+      total: parseInt(countResult.total, 10),
+      totalPages: Math.ceil(parseInt(countResult.total, 10) / limit),
+    },
+  };
+}
+
+export async function markInvitationAccepted(id, userId) {
+  return queryOne(
+    `UPDATE staff_invitations
+     SET status = 'ACCEPTED', accepted_at = NOW(), accepted_user_id = $2, updated_at = NOW()
+     WHERE id = $1 AND status = 'PENDING'
+     RETURNING ${invitationFields}`,
+    [id, userId]
+  );
+}
+
+export async function markInvitationExpired(id) {
+  return queryOne(
+    `UPDATE staff_invitations
+     SET status = 'EXPIRED', updated_at = NOW()
+     WHERE id = $1 AND status = 'PENDING'
+     RETURNING ${invitationFields}`,
+    [id]
+  );
+}
+
+export async function revokeInvitation(id) {
+  return queryOne(
+    `UPDATE staff_invitations
+     SET status = 'REVOKED', revoked_at = NOW(), updated_at = NOW()
+     WHERE id = $1 AND status = 'PENDING'
+     RETURNING ${invitationFields}`,
+    [id]
+  );
+}
+
+export async function findInvitationById(id) {
+  return queryOne(
+    `SELECT ${invitationFields} FROM staff_invitations WHERE id = $1`,
+    [id]
+  );
+}
+
+export async function resendInvitation(id, newTokenHash, newExpiresAt) {
+  return queryOne(
+    `UPDATE staff_invitations
+     SET token_hash = $2, expires_at = $3, status = 'PENDING',
+         updated_at = NOW(), revoked_at = NULL
+     WHERE id = $1 AND status IN ('PENDING', 'EXPIRED', 'REVOKED')
+     RETURNING ${invitationFields}`,
+    [id, newTokenHash, newExpiresAt]
+  );
+}
+
+export async function expireStaleInvitations() {
+  return query(
+    `UPDATE staff_invitations
+     SET status = 'EXPIRED', updated_at = NOW()
+     WHERE status = 'PENDING' AND expires_at < NOW()`
   );
 }

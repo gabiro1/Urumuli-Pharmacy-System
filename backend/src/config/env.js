@@ -63,6 +63,7 @@ export const env = {
     RESEND_COOLDOWN_SECONDS: numeric('OTP_RESEND_COOLDOWN_SECONDS', 60),
     PROVIDER: optional('OTP_PROVIDER', 'development'),
   },
+  SMS_PROVIDER: optional('SMS_PROVIDER', 'development'),
   PAYMENT_PROVIDER: optional('PAYMENT_PROVIDER', 'development'),
   ORDER_SIGNING_SECRET: optional('ORDER_SIGNING_SECRET', optional('JWT_SECRET', '')),
   RESERVATION_MINUTES: numeric('RESERVATION_MINUTES', 30),

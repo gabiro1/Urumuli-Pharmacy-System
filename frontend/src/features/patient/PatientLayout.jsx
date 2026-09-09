@@ -14,7 +14,7 @@ export function PatientLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   if (!isAuthenticated) {
-    return <Navigate to="/patient/login" replace />
+    return <Navigate to="/login" replace />
   }
 
   return (

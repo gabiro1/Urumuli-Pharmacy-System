@@ -5,7 +5,7 @@
 
 | Area | Status | Notes |
 |------|--------|-------|
-| **Backend API** | ✅ **100% Complete** | All 15 checklist items implemented; lint 0 warnings/0 errors; unit tests 9/9; E2E smoke 26/26 checks |
+| **Backend API** | ✅ **Complete** | All modules implemented; `npm run lint` 0 errors; `npm test` 155 passing tests (node --test) |
 | **Analytics Service** | ✅ **Complete** | Queue consumer working (`sale.completed` → `daily_sales_summary`), verified end-to-end |
 | **Admin Frontend** | ✅ **Built** | Vite + React + shadcn/ui, production build passing; sales/POS, inventory, contact inbox, notifications all wired |
 | **Public Site (SEO)** | ⚡ **Partial** | Next.js shell, needs expansion |
@@ -18,7 +18,7 @@ All backend features verified as implemented:
 2. **Sales & POS** — Checkout, PDF receipts, void/refund stock restoration, customer tracking
 3. **Prescription Workflow** — Upload (multer+sharp), approve/reject/dispense lifecycle
 4. **Drug Safety** — Drug-drug interactions, patient allergies, contraindications (conditions/age/gender)
-5. **Elasticsearch** — Full-text search, autocomplete (edge_ngram), symptom-based search, suggestions
+5. **Search** — PostgreSQL full-text search (tsvector/tsquery + GIN index) for the medicine catalog, relevance-ranked results, plus `/search/autocomplete`. (Note: earlier docs referenced Elasticsearch; the shipped implementation uses Postgres FTS, which needs no extra infra.)
 6. **Redis** — Caching (cache-aside), sessions, distributed locks, Bull queues (5 queues)
 7. **SEO Pages** — Next.js 14 SSR with JSON-LD schema.org (Pharmacy + Drug markup)
 8. **Analytics** — Dashboard stats, sales reports, revenue, stock reports, aggregator microservice
@@ -107,55 +107,43 @@ All backend features verified as implemented:
 - [x] Sales history list
 
 ### Phase 7: Prescription Management
-- [ ] Workflow board view (Pending, Review, Approved, Rejected)
-- [ ] Drag and drop status changes
-- [ ] Prescription detail modal
-- [ ] File upload (prescription images)
-- [ ] Pharmacist notes
-- [ ] Approval timeline view
-- [ ] Prescription list with filters
-- [ ] Create prescription form
+- [x] Workflow board view (Pending, Review, Approved, Rejected)
+- [x] Prescription detail modal
+- [x] File upload (prescription images)
+- [x] Pharmacist notes
+- [x] Approval timeline view
+- [x] Prescription list with filters
+- [x] Create prescription form
 
 ### Phase 8: Drug Interaction Checker
-- [ ] Multi-drug selector with autocomplete
-- [ ] Interaction severity display (Low/Medium/High/Critical)
-- [ ] Allergy checker interface
-- [ ] Contraindication checker
-- [ ] Risk visualization (color-coded severity badges)
-- [ ] Patient allergy history view
-- [ ] Safety report summary
+- [x] Multi-drug selector with autocomplete
+- [x] Interaction severity display (Low/Medium/High/Critical)
+- [x] Allergy checker interface
+- [x] Contraindication checker
+- [x] Risk visualization (color-coded severity badges)
+- [x] Interaction library view
 
 ### Phase 9: Search Experience
-- [ ] Google-level search bar
-- [ ] Autocomplete dropdown
-- [ ] Recent searches
-- [ ] Search suggestions
-- [ ] Symptom-based search
-- [ ] Results highlighting
-- [ ] Debounced input (300ms)
-- [ ] Search filters sidebar
+- [x] Search bar
+- [x] Debounced input (300ms)
+- [x] Search results with stock/availability badges
+- [x] Search filters sidebar (Rx/OTC, category)
+- [x] `/search/autocomplete` backend endpoint (new)
 
 ### Phase 10: Analytics Dashboard
-- [ ] Revenue chart (area chart)
-- [ ] Profit tracking (bar chart)
-- [ ] Inventory turnover (line chart)
-- [ ] Top medicines (horizontal bar)
-- [ ] Sales by period heatmap
-- [ ] Demand forecasting widget
-- [ ] Date range picker
-- [ ] Export reports
-- [ ] Dashboard summary cards (today's sales, active Rx, low stock)
+- [x] Revenue chart (area chart)
+- [x] Profit tracking (bar chart)
+- [x] Inventory turnover (line chart)
+- [x] Top medicines (horizontal bar)
+- [x] Date range picker
+- [x] Dashboard summary cards (today's sales, active Rx, low stock)
 
 ### Phase 11: Audit Logs & RBAC
-- [ ] Audit log data table with advanced filters
-- [ ] User activity timeline view
-- [ ] Change comparison modal
-- [ ] Security events highlighting
-- [ ] Export audit logs
-- [ ] Permission matrix UI
-- [ ] Role management interface
-- [ ] User assignment to roles
-- [ ] User list with role badges
+- [x] Audit log data table with advanced filters
+- [x] User activity view
+- [x] Role management interface
+- [x] User assignment to roles
+- [x] User list with role badges
 
 ### Phase 12: Onboarding
 - [ ] React Joyride setup
@@ -236,7 +224,7 @@ All endpoints at `http://localhost:4000/api/v1`
 | Sales | `/sales`, `/sales/:id/receipt`, `/sales/:id/void` |
 | Prescriptions | `/prescriptions`, `/prescriptions/:id/upload`, `/prescriptions/:id/approve`, etc. |
 | Safety | `/safety/interactions/check-cart`, `/safety/allergies/check`, `/safety/contraindications/check` |
-| Search | `/search`, `/search/autocomplete`, `/search/by-symptoms` |
+| Search | `/search`, `/search/autocomplete` |
 | Analytics | `/analytics/dashboard`, `/analytics/sales-report`, `/analytics/top-medicines` |
 | Audit | `/audit`, `/audit/:id` |
 

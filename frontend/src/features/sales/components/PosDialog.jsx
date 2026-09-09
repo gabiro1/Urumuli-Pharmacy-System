@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import { Search, Plus, Minus, Trash2, Loader2, ShoppingCart, CheckCircle2, Banknote } from 'lucide-react'
+import { Search, Plus, Minus, Trash2, Loader2, ShoppingCart, CheckCircle2, Banknote, ScanLine } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -27,11 +27,72 @@ export default function PosDialog({ open, onOpenChange }) {
   const [discountAmount, setDiscountAmount] = useState('0')
   const [notes, setNotes] = useState('')
   const [done, setDone] = useState(null)
+  const [barcode, setBarcode] = useState('')
+  const [scanState, setScanState] = useState(null)
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search), 300)
     return () => clearTimeout(timer)
   }, [search])
+
+  const barcodeLookup = useQuery({
+    queryKey: ['pos-barcode', barcode],
+    queryFn: () => api.get(`/inventory/medicines/barcode/${encodeURIComponent(barcode)}`).then((res) => res.data),
+    enabled: open && barcode.length > 0,
+    retry: false,
+  })
+
+  useEffect(() => {
+    if (barcodeLookup.data?.data && open) {
+      const medicine = barcodeLookup.data.data
+      const stock = Number(medicine.currentStock ?? medicine.current_stock ?? 0)
+      if (stock <= 0) {
+        setScanState({ ok: false, message: 'Out of stock' })
+      } else {
+        addToCart(medicine)
+        setScanState({ ok: true, message: `${medicine.name} added to cart` })
+      }
+      setBarcode('')
+    }
+  }, [barcodeLookup.data, open])
+
+  useEffect(() => {
+    if (barcodeLookup.isError && open) {
+      setScanState({ ok: false, message: 'No medicine found for that barcode' })
+      setBarcode('')
+    }
+  }, [barcodeLookup.isError, open])
+
+  useEffect(() => {
+    if (!scanState || !open) return
+    const timer = setTimeout(() => setScanState(null), 2500)
+    return () => clearTimeout(timer)
+  }, [scanState, open])
+
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (e) => {
+      const target = e.target
+      const isTyping = target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)
+      if (isTyping) return
+
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (barcode) {
+          setBarcode('')
+        }
+        return
+      }
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setBarcode((prev) => prev + e.key)
+      } else if (e.key === 'Backspace' && barcode) {
+        setBarcode((prev) => prev.slice(0, -1))
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, barcode])
 
   useEffect(() => {
     if (open) {
@@ -44,6 +105,8 @@ export default function PosDialog({ open, onOpenChange }) {
       setDiscountAmount('0')
       setNotes('')
       setDone(null)
+      setBarcode('')
+      setScanState(null)
     }
   }, [open])
 
@@ -163,6 +226,17 @@ export default function PosDialog({ open, onOpenChange }) {
         ) : (
           <div className="flex-1 grid md:grid-cols-2 overflow-hidden">
             <div className="p-5 space-y-4 border-r border-border flex flex-col max-h-[60vh] md:max-h-none">
+              <div className="flex items-center gap-2">
+                <ScanLine className="w-4 h-4 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">
+                  Scan a barcode or use the search box
+                </p>
+              </div>
+              {scanState && (
+                <div className={`rounded-md px-3 py-2 text-sm ${scanState.ok ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+                  {scanState.message}
+                </div>
+              )}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input

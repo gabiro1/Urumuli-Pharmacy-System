@@ -30,10 +30,10 @@ const navigationItems = [
 ]
 
 const medicineQuickAccess = [
-  { label: 'Paracetamol 500mg', icon: Pill, path: '/app/inventory?q=paracetamol', section: 'Medicines' },
-  { label: 'Amoxicillin 250mg', icon: Pill, path: '/app/inventory?q=amoxicillin', section: 'Medicines' },
-  { label: 'Ibuprofen 400mg', icon: Pill, path: '/app/inventory?q=ibuprofen', section: 'Medicines' },
-  { label: 'Omeprazole 20mg', icon: Pill, path: '/app/inventory?q=omeprazole', section: 'Medicines' },
+  { label: 'Paracetamol 500mg', icon: Pill, path: '/app/products?q=paracetamol', section: 'Products' },
+  { label: 'Amoxicillin 250mg', icon: Pill, path: '/app/products?q=amoxicillin', section: 'Products' },
+  { label: 'Ibuprofen 400mg', icon: Pill, path: '/app/products?q=ibuprofen', section: 'Products' },
+  { label: 'Omeprazole 20mg', icon: Pill, path: '/app/products?q=omeprazole', section: 'Products' },
 ]
 
 const allItems = [...navigationItems, ...medicineQuickAccess]

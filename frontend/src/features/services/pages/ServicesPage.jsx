@@ -12,6 +12,9 @@ import {
   ArrowRight,
   CheckCircle2,
   Layers,
+  Package,
+  ShoppingCart,
+  BarChart3,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -27,6 +30,26 @@ const services = [
       'Upload prescription images directly from your phone',
       'Track status from Pending to Completed',
       'Automated audit trail for every action',
+    ],
+  },
+  {
+    icon: Package,
+    title: 'Inventory Management',
+    description: 'Keep medicine stock, pricing, categories, and availability organized so your team always has an accurate view of the pharmacy.',
+    features: [
+      'Centralized medicine catalog and stock records',
+      'Availability and pricing management',
+      'Stock-aware fulfillment workflows',
+    ],
+  },
+  {
+    icon: ShoppingCart,
+    title: 'Sales & Order Fulfillment',
+    description: 'Process medicine requests and sales while keeping fulfillment progress and inventory records connected.',
+    features: [
+      'Manage medicine requests in one workspace',
+      'Complete sales with clear fulfillment status',
+      'Keep stock aligned with daily transactions',
     ],
   },
   {
@@ -82,11 +105,21 @@ const services = [
   {
     icon: Search,
     title: 'Audit Trail & Compliance',
-    description: 'Every prescription action is logged in an immutable audit trail, ensuring full compliance with healthcare regulations.',
+    description: 'Important pharmacy actions are logged in an immutable audit trail, supporting accountability and compliance.',
     features: [
       'Tamper-proof activity logs',
       'User action tracking per prescription',
       'Exportable compliance reports',
+    ],
+  },
+  {
+    icon: BarChart3,
+    title: 'Analytics & Reporting',
+    description: 'Monitor pharmacy activity with clear insight into inventory, sales, prescriptions, and operational performance.',
+    features: [
+      'At-a-glance operational dashboards',
+      'Sales and inventory visibility',
+      'Data to support better daily decisions',
     ],
   },
   {
@@ -104,23 +137,23 @@ const services = [
 const process = [
   {
     step: 1,
-    title: 'Patient Submits Prescription',
-    description: 'Patients upload a prescription image or enter medication details through the patient portal.',
+    title: 'Set Up Your Pharmacy',
+    description: 'Organize your medicines, inventory, pricing, staff access, and workflows in one system.',
   },
   {
     step: 2,
-    title: 'Pharmacist Reviews',
-    description: 'The prescription appears in the pharmacist dashboard for review, including drug interaction checks.',
+    title: 'Receive Digital Requests',
+    description: 'Patients submit prescriptions or medicine requests through the portal while staff see them in one dashboard.',
   },
   {
     step: 3,
-    title: 'Approval or Rejection',
-    description: 'The pharmacist approves, rejects with a reason, or requests clarification via secure messaging.',
+    title: 'Review and Fulfill Safely',
+    description: 'Use medication safety checks, pharmacist review, and clear status updates before completing fulfillment or sale.',
   },
   {
     step: 4,
-    title: 'Completion & Follow-Up',
-    description: 'Once approved and fulfilled, both parties get confirmation. Follow-up questions go through the messaging system.',
+    title: 'Track and Improve Operations',
+    description: 'Keep inventory current, communicate securely with patients, and use reporting and audit records to improve service.',
   },
 ]
 
@@ -157,7 +190,7 @@ export default function ServicesPage() {
             <h1 className="text-4xl lg:text-5xl font-bold tracking-tight mb-6">
               Everything You Need for{' '}
               <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Digital Prescription Management
+                Complete Pharmacy Operations
               </span>
             </h1>
             <p className="text-lg text-muted-foreground leading-relaxed">
@@ -212,7 +245,7 @@ export default function ServicesPage() {
               How It Works
             </div>
             <h2 className="text-3xl lg:text-4xl font-bold tracking-tight">
-              From Submission to Completion
+              From Setup to Better Service
             </h2>
           </motion.div>
 

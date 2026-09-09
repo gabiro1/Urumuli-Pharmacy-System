@@ -3,6 +3,7 @@ import { env } from './config/env.js';
 import { getPool, healthCheck } from './config/database.js';
 import { getRedisClient, closeRedis, healthCheckRedis } from './config/redis.js';
 import { closeAllQueues } from './services/queue.service.js';
+import { registerScheduledWorkers } from './workers/scheduled.js';
 
 let server;
 
@@ -18,8 +19,14 @@ async function initializeServices() {
     getRedisClient();
     const redisHealthy = await healthCheckRedis();
     console.log(`Redis connected: ${redisHealthy}`);
+
+    if (redisHealthy) {
+      registerScheduledWorkers();
+    } else {
+      console.warn('Redis unavailable; scheduled background workers will not start.');
+    }
   } catch (error) {
-    console.warn('Redis connection failed, continuing without cache:', error.message);
+    console.warn('Redis connection failed, continuing without cache or workers:', error.message);
   }
 }
 

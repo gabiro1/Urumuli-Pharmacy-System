@@ -6,7 +6,7 @@ export function PatientProtectedRoute({ children }) {
   const location = useLocation()
 
   if (!isAuthenticated) {
-    return <Navigate to="/patient/login" state={{ from: location }} replace />
+    return <Navigate to="/login" state={{ from: location }} replace />
   }
 
   return children

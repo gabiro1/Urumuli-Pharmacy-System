@@ -13,13 +13,14 @@ export const useAuthStore = create(
       login: async (email, password) => {
         const { data } = await api.post('/auth/login', { email, password })
         const { user, accessToken, refreshToken } = data.data
-        if (user.role === 'PATIENT') {
-          throw new Error('Please use the patient sign-in page for this account.')
-        }
+        get().setSession(user, accessToken, refreshToken)
+        return user
+      },
+
+      setSession: (user, accessToken, refreshToken) => {
         set({ user, accessToken, refreshToken, isAuthenticated: true })
         localStorage.setItem('accessToken', accessToken)
         localStorage.setItem('refreshToken', refreshToken)
-        return user
       },
 
       register: async (userData) => {

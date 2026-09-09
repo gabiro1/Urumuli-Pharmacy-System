@@ -74,7 +74,7 @@ export function PatientTopNav({ onMenuClick }) {
   const handleLogout = async () => {
     setUserMenuOpen(false)
     await logout()
-    navigate('/patient/login', { replace: true })
+    navigate('/login', { replace: true })
   }
 
   return (

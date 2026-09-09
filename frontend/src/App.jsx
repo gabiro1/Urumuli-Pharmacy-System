@@ -15,6 +15,7 @@ const OtpVerificationPage = lazy(() => import('@/features/auth/pages/OtpVerifica
 const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'))
 const PrescriptionPages = lazy(() => import('@/features/prescriptions/pages/PrescriptionPages'))
 const InventoryPage = lazy(() => import('@/features/inventory/pages/InventoryPage'))
+const ProductsPage = lazy(() => import('@/features/products/ProductsPage'))
 const SalesPage = lazy(() => import('@/features/sales/pages/SalesPage'))
 const AnalyticsPage = lazy(() => import('@/features/analytics/pages/AnalyticsPage'))
 const SearchPage = lazy(() => import('@/features/search/pages/SearchPage'))
@@ -29,10 +30,13 @@ const PrescriptionRequestPage = lazy(() => import('@/features/shop/PrescriptionR
 const DrugCheckerPage = lazy(() => import('@/features/safety/pages/DrugCheckerPage'))
 const AuditPage = lazy(() => import('@/features/audit/pages/AuditPage'))
 const AdminPage = lazy(() => import('@/features/admin/pages/AdminPage'))
+const StaffManagementPage = lazy(() => import('@/features/admin/pages/StaffManagementPage'))
+const PharmacyManagementPage = lazy(() => import('@/features/admin/pages/PharmacyManagementPage'))
+const ProfessionalCredentialsPage = lazy(() => import('@/features/pharmacist/pages/ProfessionalCredentialsPage'))
 const PartnersPage = lazy(() => import('@/features/admin/pages/PartnersPage'))
+const AcceptInvitationPage = lazy(() => import('@/features/auth/pages/AcceptInvitationPage'))
 const NotFoundPage = lazy(() => import('@/features/not-found/pages/NotFoundPage'))
 
-const PatientLoginPage = lazy(() => import('@/features/patient/pages/PatientLoginPage'))
 const PatientRegisterPage = lazy(() => import('@/features/patient/pages/PatientRegisterPage'))
 const PatientDashboard = lazy(() => import('@/features/patient/pages/PatientDashboard'))
 const MessagesPage = lazy(() => import('@/features/patient/pages/MessagesPage'))
@@ -50,6 +54,15 @@ const AboutPage = lazy(() => import('@/features/about/pages/AboutPage'))
 const ServicesPage = lazy(() => import('@/features/services/pages/ServicesPage'))
 const ContactPage = lazy(() => import('@/features/contact/pages/ContactPage'))
 const ContactInboxPage = lazy(() => import('@/features/contact/pages/ContactInboxPage'))
+
+const ExpiryAlertsPage = lazy(() => import('@/features/expiry/pages/ExpiryAlertsPage'))
+const ControlledSubstancesPage = lazy(() => import('@/features/pharmacist/pages/ControlledSubstancesPage'))
+const TransfersPage = lazy(() => import('@/features/pharmacist/pages/TransfersPage'))
+const TelehealthPage = lazy(() => import('@/features/pharmacist/pages/TelehealthPage'))
+const RegulatoryReportsPage = lazy(() => import('@/features/admin/pages/RegulatoryReportsPage'))
+const ConsentPage = lazy(() => import('@/features/patient/pages/ConsentPage'))
+const RefillRemindersPage = lazy(() => import('@/features/patient/pages/RefillRemindersPage'))
+const DeliveryTrackingPage = lazy(() => import('@/features/patient/pages/DeliveryTrackingPage'))
 
 function PageLoader() {
   return (
@@ -95,6 +108,7 @@ export default function App() {
 
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/accept-invite" element={<AcceptInvitationPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-otp" element={<OtpVerificationPage />} />
@@ -111,7 +125,7 @@ export default function App() {
         <Route path="/orders/:id/label" element={<DispensingLabelPage />} />
         <Route path="/orders/:id/payment" element={<PaymentPage />} />
 
-        <Route path="/patient/login" element={<PatientLoginPage />} />
+        <Route path="/patient/login" element={<Navigate to="/login" replace />} />
         <Route path="/patient/register" element={<PatientRegisterPage />} />
         <Route
           path="/patient"
@@ -129,6 +143,9 @@ export default function App() {
           <Route path="orders" element={<PatientOrdersPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="consent" element={<ConsentPage />} />
+          <Route path="refill-reminders" element={<RefillRemindersPage />} />
+          <Route path="delivery" element={<DeliveryTrackingPage />} />
         </Route>
 
         <Route
@@ -141,13 +158,45 @@ export default function App() {
         >
           <Route index element={<DashboardPage />} />
           <Route path="prescriptions/*" element={<PrescriptionPages />} />
-          <Route path="inventory" element={<InventoryPage />} />
+          <Route path="inventory" element={<Navigate to="/app/products" replace />} />
+          <Route path="products" element={<ProductsPage />} />
           <Route path="sales" element={<SalesPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="safety/drug-checker" element={<DrugCheckerPage />} />
           <Route path="audit" element={<AuditPage />} />
-          <Route path="admin" element={<AdminPage />} />
+          <Route
+            path="credentials"
+            element={
+              <ProtectedRoute allowedRoles={['PHARMACIST']}>
+                <ProfessionalCredentialsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin"
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN']}>
+                <AdminPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="staff"
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'MANAGER']}>
+                <StaffManagementPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="pharmacies"
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'MANAGER']}>
+                <PharmacyManagementPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="partners"
             element={
@@ -161,6 +210,11 @@ export default function App() {
           <Route path="contact-inbox" element={<ContactInboxPage />} />
           <Route path="orders" element={<OrderQueuePage />} />
           <Route path="orders/:id" element={<OrderReviewPage />} />
+          <Route path="expiry-alerts" element={<ExpiryAlertsPage />} />
+          <Route path="controlled-substances" element={<ControlledSubstancesPage />} />
+          <Route path="transfers" element={<TransfersPage />} />
+          <Route path="telehealth" element={<TelehealthPage />} />
+          <Route path="regulatory-reports" element={<RegulatoryReportsPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

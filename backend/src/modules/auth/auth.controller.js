@@ -11,6 +11,44 @@ export async function login(req, res, next) {
   }
 }
 
+export async function verifyTwoFactorLogin(req, res, next) {
+  try {
+    const { tempToken, code } = req.body;
+    const result = await authService.verifyTwoFactorLogin(tempToken, code, req.ip, req.get('User-Agent'));
+    return sendSuccess(res, result, 'Two-factor authentication successful');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function setupTwoFactor(req, res, next) {
+  try {
+    const result = await authService.setupTwoFactor(req.user.userId, req.user.userId, req.ip, req.get('User-Agent'));
+    return sendSuccess(res, result, 'Two-factor authentication setup initiated');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function verifyTwoFactorSetup(req, res, next) {
+  try {
+    const { code } = req.body;
+    const result = await authService.verifyTwoFactorSetup(req.user.userId, code, req.user.userId, req.ip, req.get('User-Agent'));
+    return sendSuccess(res, result, 'Two-factor authentication verified');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function disableTwoFactor(req, res, next) {
+  try {
+    const result = await authService.disableTwoFactor(req.user.userId, req.user.userId, req.ip, req.get('User-Agent'));
+    return sendSuccess(res, result, 'Two-factor authentication disabled');
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function register(req, res, next) {
   try {
     const result = await authService.register(req.body, req.ip, req.get('User-Agent'));
@@ -188,6 +226,76 @@ export async function updateUserActiveStatus(req, res, next) {
       req.get('User-Agent')
     );
     return sendSuccess(res, result, 'User status updated');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createInvitation(req, res, next) {
+  try {
+    const result = await authService.createInvitation(
+      req.body,
+      req.user.userId,
+      req.ip,
+      req.get('User-Agent')
+    );
+    return sendCreated(res, result, 'Invitation created');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function acceptInvitation(req, res, next) {
+  try {
+    const result = await authService.acceptInvitation(
+      req.body.token,
+      req.body,
+      req.ip,
+      req.get('User-Agent')
+    );
+    return sendCreated(res, result, 'Invitation accepted');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listInvitations(req, res, next) {
+  try {
+    const { page, limit, status } = req.query;
+    const result = await authService.listInvitations(
+      parseInt(page) || 1,
+      parseInt(limit) || 20,
+      status
+    );
+    return sendSuccess(res, result.data, 'Success', 200, result.meta);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function revokeInvitation(req, res, next) {
+  try {
+    const result = await authService.revokeInvitation(
+      req.params.id,
+      req.user.userId,
+      req.ip,
+      req.get('User-Agent')
+    );
+    return sendSuccess(res, result, 'Invitation revoked');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function resendInvitation(req, res, next) {
+  try {
+    const result = await authService.resendInvitation(
+      req.params.id,
+      req.user.userId,
+      req.ip,
+      req.get('User-Agent')
+    );
+    return sendSuccess(res, result, 'Invitation resent');
   } catch (error) {
     next(error);
   }

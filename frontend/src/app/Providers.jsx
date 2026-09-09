@@ -4,6 +4,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from 'sonner'
 import { ErrorBoundary } from 'react-error-boundary'
 import { useEffect } from 'react'
+import { I18nProvider } from '@/lib/i18n'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,6 +47,7 @@ export function Providers({ children }) {
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
+          <I18nProvider>
           <TooltipProvider>
             {children}
             <Toaster
@@ -61,6 +63,7 @@ export function Providers({ children }) {
               }}
             />
           </TooltipProvider>
+          </I18nProvider>
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>

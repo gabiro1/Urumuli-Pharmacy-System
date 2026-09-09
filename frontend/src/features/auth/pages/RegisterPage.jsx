@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -17,9 +17,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
 import { useAuthStore } from '@/stores/authStore'
-import api from '@/lib/api'
 import PublicNavbar from '@/components/shared/PublicNavbar'
 import PublicFooter from '@/components/shared/PublicFooter'
 import { getApiErrorMessage } from '@/lib/apiError'
@@ -48,7 +46,6 @@ const registerSchema = z
       .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
       .regex(/[0-9]/, 'Password must contain at least one number'),
     confirmPassword: z.string().min(1, 'Please confirm your password'),
-    role: z.string().min(1, 'Role is required'),
     acceptTerms: z.literal(true, {
       errorMap: () => ({ message: 'You must accept the terms and conditions' }),
     }),
@@ -66,15 +63,6 @@ const strengthConfig = [
   { label: 'Very Strong', color: 'bg-emerald-500', score: 4 },
 ]
 
-const fallbackRoles = [
-  { name: 'ADMIN' },
-  { name: 'AUDITOR' },
-  { name: 'CASHIER' },
-  { name: 'INVENTORY_MANAGER' },
-  { name: 'MANAGER' },
-  { name: 'PHARMACIST' },
-]
-
 export default function RegisterPage() {
   const navigate = useNavigate()
   const registerUser = useAuthStore((s) => s.register)
@@ -82,20 +70,6 @@ export default function RegisterPage() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [serverError, setServerError] = useState(null)
-  const [roles, setRoles] = useState(fallbackRoles)
-  const [rolesLoading, setRolesLoading] = useState(true)
-
-  useEffect(() => {
-    api.get('/auth/roles')
-      .then((r) => {
-        const apiRoles = Array.isArray(r.data.data) && r.data.data.length > 0
-          ? r.data.data
-          : fallbackRoles
-        setRoles(apiRoles)
-      })
-      .catch(() => setRoles(fallbackRoles))
-      .finally(() => setRolesLoading(false))
-  }, [])
 
   const {
     register,
@@ -110,7 +84,6 @@ export default function RegisterPage() {
       phone: '',
       password: '',
       confirmPassword: '',
-      role: 'PHARMACIST',
       acceptTerms: false,
     },
   })
@@ -143,7 +116,6 @@ export default function RegisterPage() {
         email: values.email,
         phone: values.phone?.trim() || undefined,
         password: values.password,
-        role: values.role,
       })
       toast.success('Account created successfully! Please sign in.')
       navigate('/login', { replace: true })
@@ -247,10 +219,10 @@ export default function RegisterPage() {
 
             <div className="space-y-2">
               <h2 className="text-3xl font-bold tracking-tight">
-                Create an account
+                Create your account
               </h2>
               <p className="text-muted-foreground">
-                Fill in your details to get started
+                Join as a patient or client to access pharmacy services
               </p>
             </div>
 
@@ -388,31 +360,6 @@ export default function RegisterPage() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                {rolesLoading ? (
-                  <Skeleton className="h-10 w-full rounded-md" />
-                ) : (
-                  <select
-                    id="role"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    {...register('role')}
-                  >
-                    <option value="">Select a role...</option>
-                    {roles.map((role) => (
-                      <option key={role.name} value={role.name}>
-                        {role.name.charAt(0) + role.name.slice(1).toLowerCase()}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {errors.role && (
-                  <p className="text-xs text-destructive mt-1">
-                    {errors.role.message}
-                  </p>
-                )}
-              </div>
-
               <div className="flex items-start gap-2">
                 <input
                   id="acceptTerms"
@@ -456,15 +403,33 @@ export default function RegisterPage() {
               </Button>
             </form>
 
-            <p className="text-center text-sm text-muted-foreground">
-              Already have an account?{' '}
+            <div className="space-y-3 text-center">
+              <p className="text-sm text-muted-foreground">
+                Already have an account?{' '}
+                <Link
+                  to="/login"
+                  className="text-primary font-medium hover:underline"
+                >
+                  Sign in
+                </Link>
+              </p>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Staff member?
+                  </span>
+                </div>
+              </div>
               <Link
-                to="/login"
-                className="text-primary font-medium hover:underline"
+                to="/accept-invite"
+                className="inline-flex items-center justify-center w-full h-11 rounded-md border border-input bg-background text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
               >
-                Sign in
+                Accept Staff Invitation
               </Link>
-            </p>
+            </div>
           </motion.div>
         </div>
       </main>

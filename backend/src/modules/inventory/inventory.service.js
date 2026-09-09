@@ -1,4 +1,8 @@
 import { NotFoundError, ValidationError } from '../../utils/errors.js';
+import fs from 'fs/promises';
+import path from 'path';
+import { randomUUID } from 'crypto';
+import { env } from '../../config/env.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { mapCategory, mapMedicine, mapSupplier, mapStockBatch, mapStockMovement } from '../../utils/serializers.js';
 import * as inventoryRepository from './inventory.repository.js';
@@ -72,6 +76,18 @@ function normalizeMedicinePayload(data, partial = false) {
     general_warnings: resolveValue(data.generalWarnings ?? data.general_warnings, null, undefined, partial),
     approved_information_url: resolveValue(data.approvedInformationUrl ?? data.approved_information_url, null, undefined, partial),
     otc_review_required: resolveValue(data.otcReviewRequired ?? data.otc_review_required, false, toBoolean, partial),
+    product_type: resolveValue(data.productType ?? data.product_type, 'MEDICINE', undefined, partial),
+    subcategory: resolveValue(data.subcategory, null, undefined, partial),
+    sku: resolveValue(data.sku, null, undefined, partial),
+    supplier_id: resolveValue(data.supplierId ?? data.supplier_id, null, undefined, partial),
+    expiry_date: resolveValue(data.expiryDate ?? data.expiry_date, null, undefined, partial),
+    active_ingredients: resolveValue(data.activeIngredients ?? data.active_ingredients, null, undefined, partial),
+    route_of_administration: resolveValue(data.routeOfAdministration ?? data.route_of_administration, null, undefined, partial),
+    dosage_instructions: resolveValue(data.dosageInstructions ?? data.dosage_instructions, null, undefined, partial),
+    care_purpose: resolveValue(data.carePurpose ?? data.care_purpose, null, undefined, partial),
+    ingredients: resolveValue(data.ingredients, null, undefined, partial),
+    usage_instructions: resolveValue(data.usageInstructions ?? data.usage_instructions, null, undefined, partial),
+    size_description: resolveValue(data.sizeDescription ?? data.size_description, null, undefined, partial),
   };
 }
 
@@ -83,14 +99,25 @@ function ensureMedicineName(value) {
   }
 }
 
+function ensureProductNumbers(data) {
+  for (const field of ['price', 'costPrice', 'currentStock', 'minStockLevel', 'reorderPoint']) {
+    if (data[field] !== undefined && data[field] !== null && Number(data[field]) < 0) {
+      throw new ValidationError(`${field} cannot be negative`, [{ field, message: `${field} cannot be negative`, code: 'too_small' }]);
+    }
+  }
+  if (data.productType && !['MEDICINE', 'PHARMACY_CARE'].includes(data.productType)) {
+    throw new ValidationError('Invalid product type');
+  }
+}
+
 export async function listMedicines(queryParams) {
   const pagination = parsePagination(queryParams, {
-    allowedSortColumns: ['name', 'price', 'current_stock', 'created_at'],
+    allowedSortColumns: ['name', 'price', 'current_stock', 'created_at', 'updated_at', 'expiry_date'],
     defaultSortBy: 'name',
     defaultSortOrder: 'ASC',
   });
 
-  const hasFilters = queryParams.search || queryParams.categoryId || queryParams.requiresPrescription || queryParams.isActive || queryParams.classification || queryParams.availability || queryParams.dosageForm;
+  const hasFilters = queryParams.search || queryParams.categoryId || queryParams.requiresPrescription || queryParams.isActive || queryParams.classification || queryParams.availability || queryParams.dosageForm || queryParams.productType || queryParams.stockStatus || queryParams.expiry || queryParams.minPrice || queryParams.maxPrice || queryParams.brand || queryParams.supplierId;
   const cacheKey = `medicines:list:${JSON.stringify({ ...queryParams, page: pagination.page, limit: pagination.limit })}`;
 
   const fetchFn = async () => {
@@ -108,6 +135,13 @@ export async function listMedicines(queryParams) {
       classification: queryParams.classification || null,
       availability: queryParams.availability || null,
       dosageForm: queryParams.dosageForm || null,
+      productType: queryParams.productType || null,
+      stockStatus: queryParams.stockStatus || null,
+      expiry: queryParams.expiry || null,
+      minPrice: queryParams.minPrice !== undefined ? Number(queryParams.minPrice) : null,
+      maxPrice: queryParams.maxPrice !== undefined ? Number(queryParams.maxPrice) : null,
+      brand: queryParams.brand || null,
+      supplierId: queryParams.supplierId || null,
     });
 
     return {
@@ -129,6 +163,19 @@ export async function searchMedicines(queryParams) {
   return listMedicines(queryParams);
 }
 
+export async function autocompleteMedicines({ q = '', limit = 8 } = {}) {
+  const search = (q || '').trim();
+  if (search.length < 2) return [];
+  const cappedLimit = Math.min(Number(limit) || 8, 20);
+  const rows = await inventoryRepository.autocompleteMedicines({ search, limit: cappedLimit });
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    genericName: row.generic_name,
+    brandName: row.brand_name,
+  }));
+}
+
 export async function getMedicine(id) {
   return cacheRemember(`medicines:detail:${id}`, 120, async () => {
     const medicine = await inventoryRepository.findMedicineById(id);
@@ -137,8 +184,17 @@ export async function getMedicine(id) {
   });
 }
 
+export async function getMedicineByBarcode(barcode) {
+  const code = String(barcode || '').trim();
+  if (!code) return null;
+  const medicine = await inventoryRepository.findMedicineByBarcode(code);
+  if (!medicine) return null;
+  return mapMedicine(medicine);
+}
+
 export async function createMedicine(data) {
   ensureMedicineName(data.name);
+  ensureProductNumbers(data);
   const medicine = await inventoryRepository.createMedicine(normalizeMedicinePayload(data));
   await invalidateMedicineCache();
   return mapMedicine(medicine);
@@ -150,6 +206,7 @@ export async function updateMedicine(id, data) {
   if (data.name !== undefined) {
     ensureMedicineName(data.name);
   }
+  ensureProductNumbers(data);
 
   const medicine = await inventoryRepository.updateMedicine(id, normalizeMedicinePayload(data, true));
   await invalidateMedicineCache();
@@ -161,10 +218,42 @@ export async function deleteMedicine(id) {
   const existing = await inventoryRepository.findMedicineById(id);
   if (!existing) throw new NotFoundError('Medicine', id);
 
+  const hasReferences = await inventoryRepository.productHasReferences(id);
+  if (hasReferences) {
+    const archived = await inventoryRepository.archiveMedicine(id);
+    await invalidateMedicineCache();
+    await cacheDelKey(`medicines:detail:${id}`);
+    return { ...mapMedicine(archived), archivedInstead: true };
+  }
+
   const medicine = await inventoryRepository.deleteMedicine(id);
   await invalidateMedicineCache();
   await cacheDelKey(`medicines:detail:${id}`);
   return mapMedicine(medicine);
+}
+
+export async function archiveMedicine(id) {
+  const existing = await inventoryRepository.findMedicineById(id);
+  if (!existing) throw new NotFoundError('Product', id);
+  const medicine = await inventoryRepository.archiveMedicine(id);
+  await invalidateMedicineCache();
+  await cacheDelKey(`medicines:detail:${id}`);
+  return mapMedicine(medicine);
+}
+
+export async function uploadProductImage(id, file) {
+  const existing = await inventoryRepository.findMedicineById(id);
+  if (!existing) throw new NotFoundError('Product', id);
+  if (!file) throw new ValidationError('Product image is required');
+  const extension = file.mimetype === 'image/jpeg' ? 'jpg' : file.mimetype.split('/')[1];
+  const relativePath = `products/${randomUUID()}.${extension}`;
+  const target = path.resolve(env.UPLOAD_DIR, relativePath);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, file.buffer);
+  const product = await inventoryRepository.updateMedicine(id, { image_url: `/uploads/${relativePath}` });
+  await invalidateMedicineCache();
+  await cacheDelKey(`medicines:detail:${id}`);
+  return mapMedicine(product);
 }
 
 export async function listCategories() {
@@ -172,6 +261,86 @@ export async function listCategories() {
     const categories = await inventoryRepository.listCategories();
     return categories.map((category) => mapCategory(category));
   });
+}
+
+function slugify(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export async function createCategory(data) {
+  const name = String(data.name || '').trim();
+  if (!name) throw new ValidationError('Category name is required');
+  const slug = data.slug ? slugify(data.slug) : slugify(name);
+  if (!slug) throw new ValidationError('Category name must include letters or numbers');
+
+  const existing = await inventoryRepository.findCategoryBySlug(slug);
+  if (existing) {
+    throw new ValidationError(`Category '${slug}' already exists`, [
+      { field: 'slug', message: 'A category with this name already exists', code: 'unique' },
+    ]);
+  }
+
+  const category = await inventoryRepository.createCategory({
+    name,
+    slug,
+    description: data.description || null,
+    parent_id: data.parentId || null,
+    is_active: data.isActive !== undefined ? toBoolean(data.isActive) : true,
+  });
+  await cacheDelKey('categories:list');
+  await invalidateMedicineCache();
+  return mapCategory(category);
+}
+
+export async function updateCategory(id, data) {
+  const existing = await inventoryRepository.findCategoryById(id);
+  if (!existing) throw new NotFoundError('Category', id);
+
+  const payload = {};
+  if (data.name !== undefined) {
+    const name = String(data.name).trim();
+    if (!name) throw new ValidationError('Category name cannot be empty');
+    payload.name = name;
+    payload.slug = slugify(name);
+  }
+  if (data.description !== undefined) payload.description = data.description;
+  if (data.parentId !== undefined) payload.parent_id = data.parentId || null;
+  if (data.isActive !== undefined) payload.is_active = toBoolean(data.isActive);
+
+  if (payload.slug && payload.slug !== existing.slug) {
+    const clash = await inventoryRepository.findCategoryBySlug(payload.slug);
+    if (clash && clash.id !== id) {
+      throw new ValidationError(`Category '${payload.slug}' already exists`, [
+        { field: 'name', message: 'A category with this name already exists', code: 'unique' },
+      ]);
+    }
+  }
+
+  const category = await inventoryRepository.updateCategory(id, payload);
+  await cacheDelKey('categories:list');
+  await invalidateMedicineCache();
+  return mapCategory(category);
+}
+
+export async function deleteCategory(id) {
+  const existing = await inventoryRepository.findCategoryById(id);
+  if (!existing) throw new NotFoundError('Category', id);
+
+  const productCount = await inventoryRepository.countProductsByCategory(id);
+  if (productCount > 0) {
+    const category = await inventoryRepository.updateCategory(id, { is_active: false });
+    await cacheDelKey('categories:list');
+    await invalidateMedicineCache();
+    return { ...mapCategory(category), archivedInstead: true };
+  }
+
+  const category = await inventoryRepository.deleteCategory(id);
+  await cacheDelKey('categories:list');
+  return mapCategory(category);
 }
 
 export async function getSummary() {
@@ -358,4 +527,3 @@ export async function adjustStock(data, user) {
   await invalidateMedicineCache();
   return mapStockMovement(movement);
 }
-

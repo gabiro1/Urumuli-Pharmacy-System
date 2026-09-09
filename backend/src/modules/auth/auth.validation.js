@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
-const staffRoleSchema = z.enum(['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER', 'INVENTORY_MANAGER', 'AUDITOR']);
-const emptyStringToUndefined = (value) => {
+const staffRoleSchema = z.enum(['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER', 'INVENTORY_MANAGER', 'AUDITOR']);const emptyStringToUndefined = (value) => {
   if (typeof value !== 'string') return value;
 
   const trimmed = value.trim();
@@ -26,7 +25,6 @@ export const registerSchema = z.object({
   phone: optionalPhoneSchema(
     z.string().regex(/^\+?[0-9\s\-().]+$/, 'Invalid phone number')
   ),
-  role: staffRoleSchema.optional(),
 });
 
 export const patientRegisterSchema = z.object({
@@ -89,6 +87,28 @@ export const updateUserRoleSchema = z.object({
   role: staffRoleSchema,
 });
 
+export const inviteStaffSchema = z.object({
+  email: z.string().trim().email('Invalid email format'),
+  role: staffRoleSchema,
+  fullName: z.string().trim().min(2, 'Full name is required').max(200).optional(),
+});
+
+export const acceptInvitationSchema = z.object({
+  token: z.string().min(32, 'Invalid invitation token'),
+  fullName: z.string().trim().min(2, 'Full name is required').max(200),
+  phone: optionalPhoneSchema(
+    z.string().regex(/^\+?[0-9\s\-().]+$/, 'Invalid phone number')
+  ),
+  password: z.string().min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number'),
+});
+
+export const updateUserStatusSchema = z.object({
+  isActive: z.boolean(),
+});
+
 export const patientSettingsSchema = z.object({
   prescriptionUpdates: z.boolean().optional(),
   messageAlerts: z.boolean().optional(),
@@ -119,4 +139,13 @@ export const patientProfileUpdateSchema = z.object({
   chronicConditions: z.preprocess(emptyStringToUndefined, z.string().max(5000).optional()),
 }).strict().refine((data) => Object.keys(data).length > 0, {
   message: 'At least one profile field must be provided',
+});
+
+export const verifyTwoFactorSchema = z.object({
+  tempToken: z.string().min(1, 'Two-factor session token is required'),
+  code: z.string().trim().min(6, 'Code must be at least 6 characters').max(12),
+});
+
+export const verifyTwoFactorSetupSchema = z.object({
+  code: z.string().trim().min(6, 'Code must be at least 6 characters').max(12),
 });

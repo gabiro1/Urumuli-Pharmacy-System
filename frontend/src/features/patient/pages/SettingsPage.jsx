@@ -152,7 +152,7 @@ export default function SettingsPage() {
   const handleSignOut = async () => {
     await logout()
     toast.success('Signed out')
-    navigate('/patient/login', { replace: true })
+    navigate('/login', { replace: true })
   }
 
   const initials = user

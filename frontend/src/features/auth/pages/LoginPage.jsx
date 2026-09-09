@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, Loader2, Pill, Activity, Shield } from 'lucide-react'
 import { toast } from 'sonner'
@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/stores/authStore'
+import { usePatientAuthStore } from '@/stores/patientAuthStore'
+import api from '@/lib/api'
 import PublicNavbar from '@/components/shared/PublicNavbar'
 import PublicFooter from '@/components/shared/PublicFooter'
 import { getApiErrorMessage } from '@/lib/apiError'
@@ -22,9 +24,8 @@ const loginSchema = z.object({
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/app'
-  const login = useAuthStore((s) => s.login)
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [serverError, setServerError] = useState(null)
@@ -42,9 +43,27 @@ export default function LoginPage() {
     setIsSubmitting(true)
     setServerError(null)
     try {
-      await login(values.email, values.password)
+      const { data } = await api.post('/auth/login', {
+        email: values.email,
+        password: values.password,
+      })
+      const { user, accessToken, refreshToken } = data.data
+      const from =
+        searchParams.get('redirect') || location.state?.from?.pathname
+
+      let target
+      if (user.role === 'PATIENT') {
+        usePatientAuthStore
+          .getState()
+          .setSession(user, accessToken, refreshToken)
+        target = from && from.startsWith('/patient') ? from : '/patient'
+      } else {
+        useAuthStore.getState().setSession(user, accessToken, refreshToken)
+        target = !from || from.startsWith('/patient') ? '/app' : from
+      }
+
       toast.success('Welcome back!')
-      navigate(redirect, { replace: true })
+      navigate(target, { replace: true })
     } catch (err) {
       const message = getApiErrorMessage(err, 'Invalid email or password')
       setServerError(message)
@@ -94,11 +113,12 @@ export default function LoginPage() {
             className="text-center max-w-md"
           >
             <h2 className="text-2xl font-semibold mb-4">
-              Manage Your Pharmacy with Ease
+              One Platform, All of Your Pharmacy Needs
             </h2>
             <p className="text-white/80 leading-relaxed">
-              Streamline inventory, track prescriptions, manage staff, and
-              gain real-time insights — all in one powerful platform.
+              Patients can request medicines, chat with their pharmacist, and
+              track orders — while staff manage inventory, prescriptions, and
+              sales in real time.
             </p>
           </motion.div>
 
@@ -108,7 +128,7 @@ export default function LoginPage() {
             transition={{ delay: 0.8, duration: 0.6 }}
             className="mt-12 grid grid-cols-3 gap-6 w-full max-w-md"
           >
-            {[
+                          {[
               { icon: Activity, label: 'Inventory' },
               { icon: Shield, label: 'Secure' },
               { icon: Pill, label: 'Prescriptions' },

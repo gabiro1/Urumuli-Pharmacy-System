@@ -4,13 +4,26 @@ import crypto from 'crypto';
 import { env } from '../../config/env.js';
 import * as authRepository from './auth.repository.js';
 import { createAuditLog } from '../../middlewares/auditLogger.js';
-import { UnauthorizedError, ConflictError } from '../../utils/errors.js';
-import { ROLES, AUDIT_ACTION, AUDIT_ENTITY } from '../../constants.js';
+import { UnauthorizedError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors.js';
+import { ROLES, AUDIT_ACTION, AUDIT_ENTITY, INVITATION_TTL_HOURS, INVITATION_STATUS } from '../../constants.js';
 import { mapUser, mapUserSummary, mapRole, mapPatientSettings } from '../../utils/serializers.js';
 import { cacheRemember, cacheGet, cacheSet, cacheDelKey } from '../../services/redis.service.js';
+import { verifyTotp, hashBackupCode, generateSecret, generateBackupCodes } from '../../services/totp.service.js';
 
 function refreshSessionKey(tokenHash) {
   return `auth:refresh:${tokenHash}`;
+}
+
+function generateTwoFactorChallenge(user) {
+  return jwt.sign(
+    { userId: user.id, purpose: 'two-factor-challenge' },
+    env.JWT.SECRET,
+    { expiresIn: '10m' }
+  );
+}
+
+function isStaffRole(role) {
+  return ![ROLES.PATIENT].includes(role) && role !== undefined && role !== null;
 }
 
 function refreshSessionTtlSeconds() {
@@ -78,20 +91,27 @@ export async function login(email, password, ipAddress, userAgent) {
 
   await authRepository.updateLastLogin(user.id);
 
-  const refreshToken = generateRefreshToken();
-  const refreshTokenHash = hashToken(refreshToken);
-  await authRepository.updateRefreshToken(user.id, refreshTokenHash);
-  await persistRefreshSession(user, refreshTokenHash);
-
   await createAuditLog({
     userId: user.id,
     action: AUDIT_ACTION.LOGIN,
     entity: AUDIT_ENTITY.USER,
     entityId: user.id,
-    description: `User ${user.email} logged in`,
+    description: `User ${user.email} logged in (password verified)`,
     ipAddress,
     userAgent,
   });
+
+  if (user.two_factor_enabled && isStaffRole(user.role)) {
+    return {
+      requiresTwoFactor: true,
+      tempToken: generateTwoFactorChallenge(user),
+    };
+  }
+
+  const refreshToken = generateRefreshToken();
+  const refreshTokenHash = hashToken(refreshToken);
+  await authRepository.updateRefreshToken(user.id, refreshTokenHash);
+  await persistRefreshSession(user, refreshTokenHash);
 
   return {
     user: sanitizeUser(user),
@@ -101,6 +121,8 @@ export async function login(email, password, ipAddress, userAgent) {
 }
 
 export async function register(userData, ipAddress, userAgent) {
+  // SECURITY: Public registration is ONLY for patient accounts.
+  // Staff accounts must be created through the invitation flow.
   const normalizedEmail = userData.email.trim().toLowerCase();
   const existing = await authRepository.findByEmail(normalizedEmail);
   if (existing) throw new ConflictError('Email already registered');
@@ -114,7 +136,7 @@ export async function register(userData, ipAddress, userAgent) {
     firstName: nameParts[0] || '',
     lastName: nameParts.slice(1).join(' ') || nameParts[0] || '',
     phone: userData.phone,
-    role: userData.role || ROLES.PHARMACIST,
+    role: ROLES.PATIENT,
   });
 
   await createAuditLog({
@@ -210,9 +232,127 @@ export async function refreshTokens(refreshToken, _ipAddress, _userAgent) {
   return {
     user: sanitizeUser(user),
     accessToken: generateAccessToken(user),
-    refreshToken: newRefreshToken,
+    refreshToken,
   };
 }
+
+export async function setupTwoFactor(userId, actorId, ipAddress, userAgent) {
+  const user = await authRepository.findById(userId);
+  if (!user) throw new NotFoundError('User', userId);
+  if (!isStaffRole(user.role)) throw new ForbiddenError('Two-factor authentication is only available for staff accounts');
+
+  const secret = generateSecret();
+  const backupCodes = generateBackupCodes(8);
+  const backupCodeHashes = backupCodes.map((c) => hashBackupCode(c));
+
+  const updated = await authRepository.enableTwoFactor(userId, secret, backupCodeHashes);
+
+  await createAuditLog({
+    userId: actorId || userId,
+    action: AUDIT_ACTION.UPDATE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: userId,
+    description: `Enabled two-factor authentication for ${updated.email}`,
+    ipAddress,
+    userAgent,
+  });
+
+  return {
+    secret,
+    otpAuthUrl: `otpauth://totp/Urumuli:${encodeURIComponent(updated.email)}?secret=${secret}&issuer=Urumuli`,
+    backupCodes,
+    enabled: true,
+  };
+}
+
+export async function verifyTwoFactorSetup(userId, code, actorId, ipAddress, userAgent) {
+  const user = await authRepository.findByIdWithSecret(userId);
+  if (!user) throw new NotFoundError('User', userId);
+
+  if (!verifyTotp(user.two_factor_secret, code)) {
+    throw new UnauthorizedError('Invalid two-factor authentication code');
+  }
+
+  await createAuditLog({
+    userId: actorId || userId,
+    action: AUDIT_ACTION.UPDATE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: userId,
+    description: `Verified two-factor setup for ${user.email}`,
+    ipAddress,
+    userAgent,
+  });
+
+  return { verified: true };
+}
+
+export async function verifyTwoFactorLogin(tempToken, code, ipAddress, userAgent) {
+  let payload;
+  try {
+    payload = jwt.verify(tempToken, env.JWT.SECRET);
+  } catch {
+    throw new UnauthorizedError('Two-factor session has expired, please log in again');
+  }
+  if (payload.purpose !== 'two-factor-challenge') {
+    throw new UnauthorizedError('Invalid two-factor challenge');
+  }
+
+  const user = await authRepository.findByIdWithSecret(payload.userId);
+  if (!user || !user.is_active) throw new UnauthorizedError('Invalid or inactive account');
+
+  const codeIsTotp = verifyTotp(user.two_factor_secret, code);
+
+  if (!codeIsTotp) {
+    const backupHashes = Array.isArray(user.two_factor_backup_codes) ? user.two_factor_backup_codes : [];
+    const hashed = hashBackupCode(code);
+    if (backupHashes.includes(hashed)) {
+      await authRepository.consumeBackupCode(user.id, hashed);
+    } else {
+      throw new UnauthorizedError('Invalid two-factor authentication code');
+    }
+  }
+
+  const refreshToken = generateRefreshToken();
+  const refreshTokenHash = hashToken(refreshToken);
+  await authRepository.updateRefreshToken(user.id, refreshTokenHash);
+  await persistRefreshSession(user, refreshTokenHash);
+
+  await createAuditLog({
+    userId: user.id,
+    action: AUDIT_ACTION.LOGIN,
+    entity: AUDIT_ENTITY.USER,
+    entityId: user.id,
+    description: `User ${user.email} completed two-factor authentication`,
+    ipAddress,
+    userAgent,
+  });
+
+  return {
+    user: sanitizeUser(user),
+    accessToken: generateAccessToken(user),
+    refreshToken,
+  };
+}
+
+export async function disableTwoFactor(userId, actorId, ipAddress, userAgent) {
+  const user = await authRepository.findById(userId);
+  if (!user) throw new NotFoundError('User', userId);
+
+  const updated = await authRepository.disableTwoFactor(userId);
+
+  await createAuditLog({
+    userId: actorId || userId,
+    action: AUDIT_ACTION.UPDATE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: userId,
+    description: `Disabled two-factor authentication for ${updated.email}`,
+    ipAddress,
+    userAgent,
+  });
+
+  return sanitizeUser(updated);
+}
+
 
 export async function forgotPassword(email) {
   const user = await authRepository.findByEmail(email.trim().toLowerCase());
@@ -383,6 +523,9 @@ export async function createUser(userData, ipAddress, userAgent) {
 export async function updateUserRole(userId, role, actorId, ipAddress, userAgent) {
   const user = await authRepository.findById(userId);
   if (!user) throw new UnauthorizedError('User not found');
+  if (user.role === ROLES.SUPER_ADMIN) {
+    throw new ForbiddenError('Super admin accounts cannot be modified');
+  }
 
   const updated = await authRepository.updateRole(userId, role);
 
@@ -403,6 +546,9 @@ export async function updateUserRole(userId, role, actorId, ipAddress, userAgent
 export async function updateUserActiveStatus(userId, isActive, actorId, ipAddress, userAgent) {
   const user = await authRepository.findById(userId);
   if (!user) throw new UnauthorizedError('User not found');
+  if (user.role === ROLES.SUPER_ADMIN) {
+    throw new ForbiddenError('Super admin accounts cannot be modified');
+  }
 
   const updated = await authRepository.updateActiveStatus(userId, isActive);
 
@@ -418,4 +564,168 @@ export async function updateUserActiveStatus(userId, isActive, actorId, ipAddres
   });
 
   return sanitizeUser(updated);
+}
+
+function serializeInvitation(invitation) {
+  if (!invitation) return null;
+  const safe = { ...invitation };
+  delete safe.token_hash;
+  return safe;
+}
+
+export async function createInvitation(inviteData, actorId, ipAddress, userAgent) {
+  const { email, role, fullName } = inviteData;
+
+  const existingUser = await authRepository.findByEmail(email.trim().toLowerCase());
+  if (existingUser) throw new ConflictError('A user with that email already exists');
+
+  const pending = await authRepository.findPendingInvitationByEmail(email);
+  if (pending) throw new ConflictError('An active invitation already exists for that email');
+
+  await authRepository.expireStaleInvitations();
+
+  const inviteToken = crypto.randomBytes(32).toString('hex');
+  const invitation = await authRepository.createInvitation({
+    email,
+    role,
+    fullName,
+    tokenHash: hashToken(inviteToken),
+    invitedBy: actorId,
+    expiresAt: new Date(Date.now() + INVITATION_TTL_HOURS * 60 * 60 * 1000),
+  });
+
+  await createAuditLog({
+    userId: actorId,
+    action: AUDIT_ACTION.CREATE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: invitation.id,
+    description: `Invited ${email} as ${role}`,
+    metadata: { email, role },
+    ipAddress,
+    userAgent,
+  });
+
+  const result = serializeInvitation(invitation);
+  if (env.NODE_ENV === 'development') {
+    result.inviteUrl = `${env.PUBLIC_URL || 'http://localhost:5173'}/accept-invite?token=${inviteToken}`;
+  }
+  return result;
+}
+
+export async function acceptInvitation(token, userData, ipAddress, userAgent) {
+  await authRepository.expireStaleInvitations();
+
+  const invitation = await authRepository.findInvitationByTokenHash(hashToken(token));
+  if (!invitation) throw new UnauthorizedError('Invitation is invalid');
+
+  if (invitation.status !== INVITATION_STATUS.PENDING) {
+    throw new ConflictError(
+      `Invitation is no longer pending (current status: ${invitation.status.toLowerCase()})`
+    );
+  }
+  if (new Date(invitation.expires_at) < new Date()) {
+    await authRepository.markInvitationExpired(invitation.id);
+    throw new ConflictError('Invitation has expired. Contact your administrator for a new one.');
+  }
+
+  const existing = await authRepository.findByEmail(invitation.email);
+  if (existing) throw new ConflictError('An account already exists for this email');
+
+  const passwordHash = await bcrypt.hash(userData.password, 10);
+  const nameParts = (userData.fullName || invitation.full_name || '').trim().split(/\s+/);
+
+  const user = await authRepository.create({
+    email: invitation.email,
+    passwordHash,
+    firstName: nameParts[0] || '',
+    lastName: nameParts.slice(1).join(' ') || nameParts[0] || '',
+    phone: userData.phone,
+    role: invitation.role,
+  });
+
+  await authRepository.markInvitationAccepted(invitation.id, user.id);
+
+  await createAuditLog({
+    userId: user.id,
+    action: AUDIT_ACTION.CREATE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: user.id,
+    description: `Staff ${user.email} accepted invitation and activated ${invitation.role} account`,
+    ipAddress,
+    userAgent,
+  });
+
+  const refreshToken = generateRefreshToken();
+  const refreshTokenHash = hashToken(refreshToken);
+  await authRepository.updateRefreshToken(user.id, refreshTokenHash);
+  await persistRefreshSession(user, refreshTokenHash);
+
+  return {
+    user: sanitizeUser(user),
+    accessToken: generateAccessToken(user),
+    refreshToken,
+  };
+}
+
+export async function listInvitations(page, limit, status) {
+  await authRepository.expireStaleInvitations();
+  const result = await authRepository.listInvitations({ page, limit, status });
+  return {
+    data: result.data.map((invitation) => serializeInvitation(invitation)),
+    meta: result.meta,
+  };
+}
+
+export async function revokeInvitation(invitationId, actorId, ipAddress, userAgent) {
+  await authRepository.expireStaleInvitations();
+  const updated = await authRepository.revokeInvitation(invitationId);
+  if (!updated) throw new NotFoundError('Pending invitation not found');
+
+  await createAuditLog({
+    userId: actorId,
+    action: AUDIT_ACTION.UPDATE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: invitationId,
+    description: `Revoked invitation for ${updated.email}`,
+    metadata: { email: updated.email },
+    ipAddress,
+    userAgent,
+  });
+
+  return serializeInvitation(updated);
+}
+
+export async function resendInvitation(invitationId, actorId, ipAddress, userAgent) {
+  await authRepository.expireStaleInvitations();
+
+  const existing = await authRepository.findInvitationById(invitationId);
+  if (!existing) throw new NotFoundError('Invitation not found');
+
+  if (existing.status === 'ACCEPTED') {
+    throw new ConflictError('This invitation has already been accepted');
+  }
+
+  const newToken = crypto.randomBytes(32).toString('hex');
+  const newTokenHash = hashToken(newToken);
+  const newExpiresAt = new Date(Date.now() + INVITATION_TTL_HOURS * 60 * 60 * 1000);
+
+  const updated = await authRepository.resendInvitation(invitationId, newTokenHash, newExpiresAt);
+  if (!updated) throw new NotFoundError('Invitation not found or cannot be resent');
+
+  await createAuditLog({
+    userId: actorId,
+    action: AUDIT_ACTION.UPDATE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: invitationId,
+    description: `Resent invitation to ${updated.email}`,
+    metadata: { email: updated.email, role: updated.role },
+    ipAddress,
+    userAgent,
+  });
+
+  const result = serializeInvitation(updated);
+  if (env.NODE_ENV === 'development') {
+    result.inviteUrl = `${env.PUBLIC_URL || 'http://localhost:5173'}/accept-invite?token=${newToken}`;
+  }
+  return result;
 }

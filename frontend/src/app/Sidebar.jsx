@@ -15,6 +15,8 @@ import {
   User,
   MessageSquare,
   Building2,
+  Users,
+  FileCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
@@ -39,7 +41,7 @@ const navSections = [
     label: 'Operations',
     roles: ['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER', 'INVENTORY_MANAGER', 'AUDITOR'],
     items: [
-      { label: 'Inventory', icon: Pill, path: '/app/inventory' },
+      { label: 'Products', icon: Pill, path: '/app/products' },
       { label: 'Sales', icon: ShoppingCart, path: '/app/sales' },
       { label: 'Drug Checker', icon: ShieldCheck, path: '/app/safety/drug-checker' },
       { label: 'Analytics', icon: BarChart3, path: '/app/analytics' },
@@ -68,15 +70,18 @@ const navSections = [
   },
   {
     label: 'Compliance',
-    roles: ['ADMIN', 'MANAGER', 'AUDITOR'],
+    roles: ['ADMIN', 'MANAGER', 'AUDITOR', 'PHARMACIST'],
     items: [
       { label: 'Audit Logs', icon: ScrollText, path: '/app/audit' },
+      { label: 'My Credentials', icon: FileCheck, path: '/app/credentials', roles: ['PHARMACIST'] },
     ],
   },
   {
     label: 'System',
-    roles: ['ADMIN', 'MANAGER'],
+    roles: ['ADMIN', 'MANAGER', 'SUPER_ADMIN'],
     items: [
+      { label: 'Pharmacies', icon: Building2, path: '/app/pharmacies', roles: ['ADMIN', 'MANAGER', 'SUPER_ADMIN'] },
+      { label: 'Staff', icon: Users, path: '/app/staff', roles: ['ADMIN', 'MANAGER', 'SUPER_ADMIN'] },
       { label: 'Admin', icon: Shield, path: '/app/admin' },
       { label: 'Partners', icon: Building2, path: '/app/partners', roles: ['ADMIN'] },
     ],

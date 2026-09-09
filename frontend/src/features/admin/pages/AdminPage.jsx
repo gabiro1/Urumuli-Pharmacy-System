@@ -18,6 +18,9 @@ import {
   UserPlus,
   UserCog,
   Mail,
+  MailPlus,
+  Send,
+  Ban,
   Calendar,
   Check,
   Lock,
@@ -25,6 +28,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react'
 import api from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/apiError'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -73,11 +77,19 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 
 const ROLES = [
   { id: 'ADMIN', label: 'Admin', color: 'red' },
+  { id: 'MANAGER', label: 'Manager', color: 'purple' },
   { id: 'PHARMACIST', label: 'Pharmacist', color: 'blue' },
   { id: 'CASHIER', label: 'Cashier', color: 'green' },
   { id: 'INVENTORY_MANAGER', label: 'Inventory Manager', color: 'purple' },
   { id: 'AUDITOR', label: 'Auditor', color: 'orange' },
 ]
+
+const INVITATION_STATUS = {
+  PENDING: { label: 'Pending', color: 'yellow' },
+  ACCEPTED: { label: 'Accepted', color: 'green' },
+  EXPIRED: { label: 'Expired', color: 'orange' },
+  REVOKED: { label: 'Revoked', color: 'red' },
+}
 
 const PERMISSIONS = [
   { id: 'medicine:create', label: 'Create Medicine', feature: 'Medicine' },
@@ -167,22 +179,28 @@ function StatusBadge({ active }) {
   )
 }
 
-function AddUserDialog({ open, onOpenChange }) {
+function InviteUserDialog({ open, onOpenChange }) {
   const queryClient = useQueryClient()
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'CASHIER' })
+  const [form, setForm] = useState({ fullName: '', email: '', role: 'PHARMACIST' })
   const [errors, setErrors] = useState({})
 
-  const addUserMutation = useMutation({
-    mutationFn: (data) => api.post('/auth/users', data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
-      toast.success('User added successfully')
+  const inviteMutation = useMutation({
+    mutationFn: (data) => api.post('/auth/invitations', data),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-invitations'] })
+      const inviteUrl = response?.data?.data?.inviteUrl
+      if (inviteUrl) {
+        toast.success('Invitation created — copy the link and send it to the invitee')
+        navigator.clipboard?.writeText(inviteUrl).catch(() => {})
+      } else {
+        toast.success('Invitation created')
+      }
       onOpenChange(false)
-      setForm({ name: '', email: '', password: '', role: 'CASHIER' })
+      setForm({ fullName: '', email: '', role: 'PHARMACIST' })
       setErrors({})
     },
     onError: (err) => {
-      const msg = err.response?.data?.message || 'Failed to add user'
+      const msg = getApiErrorMessage(err, 'Failed to create invitation')
       toast.error(msg)
       if (err.response?.data?.errors) {
         const fieldErrors = {}
@@ -197,16 +215,18 @@ function AddUserDialog({ open, onOpenChange }) {
   const handleSubmit = (e) => {
     e.preventDefault()
     const newErrors = {}
-    if (!form.name.trim()) newErrors.name = 'Name is required'
     if (!form.email.trim()) newErrors.email = 'Email is required'
-    if (!form.password) newErrors.password = 'Password is required'
-    if (form.password.length < 6) newErrors.password = 'Password must be at least 6 characters'
+    if (!form.role) newErrors.role = 'Role is required'
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       return
     }
     setErrors({})
-    addUserMutation.mutate(form)
+    inviteMutation.mutate({
+      email: form.email,
+      role: form.role,
+      fullName: form.fullName.trim() || undefined,
+    })
   }
 
   return (
@@ -214,23 +234,21 @@ function AddUserDialog({ open, onOpenChange }) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5" />
-            Add New User
+            <MailPlus className="w-5 h-5" />
+            Invite Staff
           </DialogTitle>
           <DialogDescription>
-            Create a new user account with role-based access
+            Send an invitation link. The invitee sets their own password when they accept.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Full Name</label>
+            <label className="text-sm font-medium">Full Name (optional)</label>
             <Input
               placeholder="John Doe"
-              value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              className={errors.name ? 'border-destructive' : ''}
+              value={form.fullName}
+              onChange={(e) => setForm((p) => ({ ...p, fullName: e.target.value }))}
             />
-            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Email</label>
@@ -242,17 +260,6 @@ function AddUserDialog({ open, onOpenChange }) {
               className={errors.email ? 'border-destructive' : ''}
             />
             {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Password</label>
-            <Input
-              type="password"
-              placeholder="••••••••"
-              value={form.password}
-              onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-              className={errors.password ? 'border-destructive' : ''}
-            />
-            {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Role</label>
@@ -271,16 +278,17 @@ function AddUserDialog({ open, onOpenChange }) {
                 ))}
               </SelectContent>
             </Select>
+            {errors.role && <p className="text-xs text-destructive">{errors.role}</p>}
           </div>
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={addUserMutation.isPending}>
-              {addUserMutation.isPending ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adding...</>
+            <Button type="submit" disabled={inviteMutation.isPending}>
+              {inviteMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>
               ) : (
-                <><UserPlus className="w-4 h-4 mr-2" />Add User</>
+                <><Send className="w-4 h-4 mr-2" />Send Invitation</>
               )}
             </Button>
           </DialogFooter>
@@ -302,7 +310,7 @@ function RoleChangeDialog({ user, open, onOpenChange }) {
       onOpenChange(false)
     },
     onError: (err) => {
-      toast.error(err.response?.data?.message || 'Failed to update role')
+      toast.error(getApiErrorMessage(err, 'Failed to update role'))
     },
   })
 
@@ -377,6 +385,131 @@ function RoleChangeDialog({ user, open, onOpenChange }) {
   )
 }
 
+function InvitationsTab({ invitations, isLoading, setAddDialog }) {
+  const queryClient = useQueryClient()
+
+  const revokeMutation = useMutation({
+    mutationFn: (id) => api.patch(`/auth/invitations/${id}/revoke`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-invitations'] })
+      toast.success('Invitation revoked')
+    },
+    onError: (err) => {
+      toast.error(getApiErrorMessage(err, 'Failed to revoke invitation'))
+    },
+  })
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 p-4 rounded-lg border">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-8 w-20" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (invitations.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-4">
+        <div className="p-4 rounded-2xl bg-muted">
+          <Mail className="w-12 h-12 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold">No invitations yet</h3>
+        <p className="text-muted-foreground text-sm max-w-sm text-center">
+          Invite a staff member and they will receive a link to set up their own account
+        </p>
+        <Button onClick={() => setAddDialog(true)} className="mt-2">
+          <MailPlus className="w-4 h-4 mr-2" />
+          Invite Staff
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="hidden md:block">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Email</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Expires</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {invitations.map((invite) => {
+            const status = INVITATION_STATUS[invite.status] || { label: invite.status, color: 'gray' }
+            return (
+              <TableRow key={invite.id} className="transition-colors hover:bg-muted/50">
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-9 h-9">
+                      <AvatarFallback>{invite.email.charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">{invite.full_name || 'Invited user'}</p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Mail className="w-3 h-3" />
+                        {invite.email}
+                      </p>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <RoleBadge role={invite.role} />
+                </TableCell>
+                <TableCell>
+                  <Badge color={status.color} className="text-xs font-medium px-3 py-1">
+                    {status.label}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3 h-3" />
+                    {invite.expires_at ? formatDate(invite.expires_at) : '—'}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center justify-end gap-1">
+                    {invite.status === 'PENDING' && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled={revokeMutation.isPending}
+                              onClick={() => revokeMutation.mutate(invite.id)}
+                            >
+                              <Ban className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Revoke invitation</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
 function UsersTab({ users, isLoading, search, onSearchChange, addDialog, setAddDialog }) {
   const [page, setPage] = useState(1)
   const [roleDialog, setRoleDialog] = useState(null)
@@ -389,7 +522,7 @@ function UsersTab({ users, isLoading, search, onSearchChange, addDialog, setAddD
       toast.success(variables.isActive ? 'User activated' : 'User deactivated')
     },
     onError: (err) => {
-      toast.error(err.response?.data?.message || 'Failed to update user status')
+      toast.error(getApiErrorMessage(err, 'Failed to update user status'))
     },
   })
 
@@ -606,7 +739,7 @@ function UsersTab({ users, isLoading, search, onSearchChange, addDialog, setAddD
         )}
       </div>
 
-      <AddUserDialog open={addDialog} onOpenChange={setAddDialog} />
+      <InviteUserDialog open={addDialog} onOpenChange={setAddDialog} />
       <RoleChangeDialog
         user={roleDialog}
         open={!!roleDialog}
@@ -711,14 +844,20 @@ function PermissionsTab() {
 export default function AdminPage() {
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('users')
-  const [addDialog, setAddDialog] = useState(false)
+  const [inviteDialog, setInviteDialog] = useState(false)
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['admin-users'],
     queryFn: () => api.get('/auth/users').then((r) => r.data),
   })
 
+  const { data: invitationsData, isLoading: invitationsLoading } = useQuery({
+    queryKey: ['admin-invitations'],
+    queryFn: () => api.get('/auth/invitations').then((r) => r.data),
+  })
+
   const users = data?.data?.users || data?.data || []
+  const invitations = invitationsData?.data?.invitations || invitationsData?.data || []
 
   return (
     <motion.div
@@ -730,13 +869,13 @@ export default function AdminPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Administration</h1>
           <p className="text-muted-foreground mt-1">
-            Manage users, roles, and permissions
+            Manage users, invitations, roles, and permissions
           </p>
         </div>
-        {activeTab === 'users' && (
-          <Button onClick={() => setAddDialog(true)} className="shrink-0 h-11">
-            <UserPlus className="w-4 h-4 mr-2" />
-            Add User
+        {activeTab !== 'permissions' && (
+          <Button onClick={() => setInviteDialog(true)} className="shrink-0 h-11">
+            <MailPlus className="w-4 h-4 mr-2" />
+            Invite Staff
           </Button>
         )}
       </div>
@@ -746,6 +885,10 @@ export default function AdminPage() {
           <TabsTrigger value="users" className="gap-2">
             <Users className="w-4 h-4" />
             Users
+          </TabsTrigger>
+          <TabsTrigger value="invitations" className="gap-2">
+            <Mail className="w-4 h-4" />
+            Invitations
           </TabsTrigger>
           <TabsTrigger value="permissions" className="gap-2">
             <Shield className="w-4 h-4" />
@@ -776,7 +919,7 @@ export default function AdminPage() {
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <AlertTriangle className="w-10 h-10 text-destructive" />
               <p className="text-muted-foreground">
-                {error.response?.data?.message || 'Failed to load users'}
+                {getApiErrorMessage(error, 'Failed to load users')}
               </p>
               <Button variant="outline" onClick={() => refetch()}>
                 <RefreshCw className="w-4 h-4 mr-2" />
@@ -789,16 +932,26 @@ export default function AdminPage() {
               isLoading={isLoading}
               search={search}
               onSearchChange={setSearch}
-              addDialog={addDialog}
-              setAddDialog={setAddDialog}
+              addDialog={inviteDialog}
+              setAddDialog={setInviteDialog}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="invitations" className="mt-6">
+          <InvitationsTab
+            invitations={invitations}
+            isLoading={invitationsLoading}
+            setAddDialog={setInviteDialog}
+          />
         </TabsContent>
 
         <TabsContent value="permissions" className="mt-6">
           <PermissionsTab />
         </TabsContent>
       </Tabs>
+
+      <InviteUserDialog open={inviteDialog} onOpenChange={setInviteDialog} />
     </motion.div>
   )
 }

@@ -75,16 +75,16 @@ export default function AboutPage() {
               About Us
             </div>
             <h1 className="text-4xl lg:text-5xl font-bold tracking-tight mb-6">
-              Connecting Patients with{' '}
+              Supporting Better{' '}
               <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Pharmacists Digitally
+                Pharmacy Operations
               </span>
             </h1>
             <p className="text-lg text-muted-foreground leading-relaxed">
-              Urumuli is a digital prescription and communication platform that makes managing
-              medications easier for patients and more efficient for pharmacists. We replace
-              paper prescriptions, phone calls, and manual follow-ups with a streamlined,
-              secure online system.
+              Urumuli is a complete pharmacy operations platform that makes medicine access
+              easier for patients and daily work more efficient for pharmacy teams. We bring
+              inventory, sales, prescriptions, communication, and follow-ups into one secure
+              online system.
             </p>
           </motion.div>
 
@@ -198,7 +198,7 @@ export default function AboutPage() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button size="lg" onClick={() => navigate('/patient/register')} className="h-12 px-8 gap-2">
-                Patient Portal
+                Create Account
                 <ArrowRight className="w-4 h-4" />
               </Button>
               <Button size="lg" variant="outline" onClick={() => navigate('/contact')} className="h-12 px-8">

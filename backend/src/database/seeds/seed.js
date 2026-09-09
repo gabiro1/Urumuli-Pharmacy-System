@@ -1,5 +1,6 @@
 import { getPool } from '../../config/database.js';
 import { medicineCatalog, medicineCategories } from './medicineCatalog.js';
+import { seedAdminUser } from './adminSeed.js';
 
 const drugInteractionSeeds = [
   {
@@ -330,6 +331,7 @@ async function seedDrugInteractions(pool) {
 
 async function seed() {
   const pool = getPool();
+  await seedAdminUser(pool);
   await seedPartners(pool);
   await seedMedicines(pool);
   await seedStockBatches(pool);
