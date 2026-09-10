@@ -35,11 +35,11 @@ export default function RegulatoryReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div><h2 className="text-2xl font-bold">Regulatory Reports</h2><p className="text-muted-foreground">Generate and manage regulatory compliance reports</p></div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Select value={reportType} onValueChange={setReportType}>
-            <SelectTrigger className="w-[200px]"><SelectValue placeholder="Report type" /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Report type" /></SelectTrigger>
             <SelectContent>
               {REPORT_TYPES.map(t => <SelectItem key={t} value={t}>{t.replace(/_/g, ' ')}</SelectItem>)}
             </SelectContent>

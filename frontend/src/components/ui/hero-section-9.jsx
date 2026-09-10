@@ -77,28 +77,28 @@ const HeroSection = ({ title, subtitle, actions, stats, images, className }) => 
 
         {/* Right Column: Image Collage */}
         <motion.div
-          className="relative h-[400px] w-full sm:h-[500px]"
+          className="relative h-[320px] w-full sm:h-[500px]"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
           {/* Images */}
           <motion.div
-            className="absolute left-1/2 top-0 h-48 w-48 -translate-x-1/2 rounded-2xl bg-muted p-2 shadow-lg sm:h-64 sm:w-64"
+            className="absolute left-1/2 top-0 h-40 w-40 -translate-x-1/2 rounded-2xl bg-muted p-2 shadow-lg sm:h-64 sm:w-64"
             style={{ transformOrigin: 'bottom center' }}
             variants={imageVariants}
           >
             <img src={images[0]} alt="Pharmacist preparing medication" className="h-full w-full rounded-xl object-cover" />
           </motion.div>
           <motion.div
-            className="absolute right-0 top-1/3 h-40 w-40 rounded-2xl bg-muted p-2 shadow-lg sm:h-56 sm:w-56"
+            className="absolute right-0 top-1/3 h-32 w-32 rounded-2xl bg-muted p-2 shadow-lg sm:h-56 sm:w-56"
             style={{ transformOrigin: 'left center' }}
             variants={imageVariants}
           >
             <img src={images[1]} alt="Patient consulting with a pharmacist" className="h-full w-full rounded-xl object-cover" />
           </motion.div>
           <motion.div
-            className="absolute bottom-0 left-0 h-36 w-36 rounded-2xl border border-border bg-muted p-2 shadow-lg sm:h-48 sm:w-48"
+            className="absolute bottom-0 left-0 h-28 w-28 rounded-2xl border border-border bg-muted p-2 shadow-lg sm:h-48 sm:w-48"
             style={{ transformOrigin: 'top right' }}
             variants={imageVariants}
           >

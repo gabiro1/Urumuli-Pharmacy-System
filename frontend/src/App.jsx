@@ -67,9 +67,9 @@ const DeliveryTrackingPage = lazy(() => import('@/features/patient/pages/Deliver
 function PageLoader() {
   return (
     <div className="p-6 space-y-4">
-      <Skeleton className="h-8 w-[250px]" />
-      <Skeleton className="h-4 w-[400px]" />
-      <div className="grid grid-cols-3 gap-4 pt-4">
+      <Skeleton className="h-8 w-[200px] sm:w-[250px]" />
+      <Skeleton className="h-4 w-[250px] sm:w-[400px]" />
+      <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-3">
         <Skeleton className="h-32 rounded-xl" />
         <Skeleton className="h-32 rounded-xl" />
         <Skeleton className="h-32 rounded-xl" />

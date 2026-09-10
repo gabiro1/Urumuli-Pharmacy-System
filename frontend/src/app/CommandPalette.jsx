@@ -135,7 +135,7 @@ export function CommandPalette() {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: -8 }}
         transition={{ duration: 0.12, ease: 'easeOut' }}
-        className="relative w-full max-w-lg rounded-xl border border-border bg-popover shadow-2xl overflow-hidden"
+        className="relative w-full max-w-lg rounded-xl border border-border bg-popover shadow-2xl overflow-hidden mx-4"
       >
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <Command className="h-4 w-4 text-muted-foreground shrink-0" />

@@ -638,19 +638,19 @@ export default function LandingPage() {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="mt-12 text-center"
           >
-            <div className="inline-flex items-center gap-6 p-4 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50">
+            <div className="inline-flex flex-col sm:flex-row items-center gap-4 sm:gap-6 p-4 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50">
               <div className="flex items-center gap-2 text-sm">
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
                 <span className="text-muted-foreground">No more paper prescriptions</span>
               </div>
-              <div className="w-px h-6 bg-border" />
+              <div className="hidden sm:block w-px h-6 bg-border" />
               <div className="flex items-center gap-2 text-sm">
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
                 <span className="text-muted-foreground">Real-time status updates</span>
               </div>
-              <div className="w-px h-6 bg-border" />
+              <div className="hidden sm:block w-px h-6 bg-border" />
               <div className="flex items-center gap-2 text-sm">
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
                 <span className="text-muted-foreground">Secure patient communication</span>
               </div>
             </div>

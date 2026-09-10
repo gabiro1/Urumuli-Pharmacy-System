@@ -194,7 +194,7 @@ export default function OtpVerificationPage() {
               </motion.div>
             )}
 
-            <div className="flex justify-center gap-2 sm:gap-3">
+            <div className="flex justify-center gap-1.5 sm:gap-3">
               {otp.map((digit, index) => (
                 <motion.div
                   key={index}
@@ -213,7 +213,7 @@ export default function OtpVerificationPage() {
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     onPaste={index === 0 ? handlePaste : undefined}
                     onFocus={() => setActiveIndex(index)}
-                    className={`w-11 h-12 sm:w-12 sm:h-14 text-center text-lg font-bold rounded-lg border-2 transition-all duration-200 bg-background
+                    className={`w-9 h-12 sm:w-12 sm:h-14 text-center text-lg font-bold rounded-lg border-2 transition-all duration-200 bg-background
                       ${
                         activeIndex === index
                           ? 'border-primary ring-2 ring-primary/20'

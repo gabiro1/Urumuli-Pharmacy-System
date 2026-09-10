@@ -187,7 +187,7 @@ function CreatePharmacyDialog({ open, onOpenChange }) {
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Registration Number</Label>
               <Input
@@ -205,7 +205,7 @@ function CreatePharmacyDialog({ open, onOpenChange }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Contact Email</Label>
               <Input
@@ -235,7 +235,7 @@ function CreatePharmacyDialog({ open, onOpenChange }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">City</Label>
               <Input
@@ -636,7 +636,7 @@ export default function PharmacyManagementPage() {
             </button>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {['ALL', 'PENDING', 'ACTIVE', 'SUSPENDED', 'REJECTED'].map((s) => (
             <Button
               key={s}
