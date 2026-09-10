@@ -311,12 +311,12 @@ export default function LandingPage() {
       <HeroSection
         title={
           <>
-            Run your entire{' '}
+            {' '}
             <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              pharmacy
+              Pharmacy
             </span>
             <br />
-            in one place
+            Management System
           </>
         }
         subtitle="Urumuli connects patients and pharmacists — digital prescriptions, inventory and sales, secure messaging, and real-time status tracking in a single streamlined platform."
