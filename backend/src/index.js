@@ -15,18 +15,22 @@ async function initializeServices() {
   }
   console.log('Database connected successfully');
 
-  try {
-    getRedisClient();
-    const redisHealthy = await healthCheckRedis();
-    console.log(`Redis connected: ${redisHealthy}`);
+  if (!env.REDIS.CONFIGURED) {
+    console.warn('Redis not configured; running without cache, rate-limit store, or scheduled workers.');
+  } else {
+    try {
+      getRedisClient();
+      const redisHealthy = await healthCheckRedis();
+      console.log(`Redis connected: ${redisHealthy}`);
 
-    if (redisHealthy) {
-      registerScheduledWorkers();
-    } else {
-      console.warn('Redis unavailable; scheduled background workers will not start.');
+      if (redisHealthy) {
+        registerScheduledWorkers();
+      } else {
+        console.warn('Redis unavailable; scheduled background workers will not start.');
+      }
+    } catch (error) {
+      console.warn('Redis connection failed, continuing without cache or workers:', error.message);
     }
-  } catch (error) {
-    console.warn('Redis connection failed, continuing without cache or workers:', error.message);
   }
 }
 

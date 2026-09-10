@@ -6,21 +6,39 @@ import { env } from './env.js';
 let pool;
 const SLOW_QUERY_THRESHOLD_MS = 500;
 
+function buildPoolConfig() {
+  const common = {
+    max: env.DB.MAX_POOL,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 20000,
+    query_timeout: 30000,
+    statement_timeout: 30000,
+    allowExitOnIdle: true,
+  };
+
+  const ssl = env.DB.SSL ? { rejectUnauthorized: false } : undefined;
+
+  if (env.DB.URL) {
+    // SSL is handled via the `ssl` option below; strip query params (e.g.
+    // ?sslmode=require) so they don't conflict with pg's SSL negotiation.
+    const connectionString = env.DB.URL.split('?')[0];
+    return { connectionString, ssl, ...common };
+  }
+
+  return {
+    host: env.DB.HOST,
+    port: env.DB.PORT,
+    database: env.DB.NAME,
+    user: env.DB.USER,
+    password: env.DB.PASSWORD,
+    ssl,
+    ...common,
+  };
+}
+
 export function getPool() {
   if (!pool) {
-    pool = new Pool({
-      host: env.DB.HOST,
-      port: env.DB.PORT,
-      database: env.DB.NAME,
-      user: env.DB.USER,
-      password: env.DB.PASSWORD,
-      max: env.DB.MAX_POOL,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-      query_timeout: 30000,
-      statement_timeout: 30000,
-      allowExitOnIdle: true,
-    });
+    pool = new Pool(buildPoolConfig());
 
     pool.on('error', (err) => {
       console.error('Unexpected database pool error:', err);
@@ -48,10 +66,11 @@ export function getPool() {
 }
 
 export async function query(text, params) {
-  const client = await getPool().connect();
   const startTime = Date.now();
   const queryId = crypto.randomBytes(4).toString('hex');
+  let client;
   try {
+    client = await getPool().connect();
     const result = await client.query(text, params);
     const duration = Date.now() - startTime;
     if (duration > SLOW_QUERY_THRESHOLD_MS) {
@@ -68,11 +87,12 @@ export async function query(text, params) {
     console.error(`[DB:ERROR] Query ${queryId} failed after ${duration}ms:`, {
       query: text.substring(0, 200),
       error: error.message,
+      code: error.code,
       duration,
     });
     throw error;
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }
 
@@ -115,7 +135,8 @@ export async function healthCheck() {
   try {
     await query('SELECT 1');
     return true;
-  } catch {
+  } catch (error) {
+    console.error('[DB] Health check failed:', error.message);
     return false;
   }
 }

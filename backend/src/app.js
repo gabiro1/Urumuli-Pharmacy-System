@@ -13,7 +13,8 @@ import routes from './routes/index.js';
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+const corsOrigins = env.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
+app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use(compression());
 
 app.use((req, res, next) => {

@@ -7,7 +7,10 @@ import { env } from '../../config/env.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function runMigrations() {
-  console.log(`Running migrations on ${env.DB.NAME}@${env.DB.HOST}...`);
+  const target = env.DB.URL
+    ? env.DB.NAME
+    : `${env.DB.NAME}@${env.DB.HOST}:${env.DB.PORT}`;
+  console.log(`Running migrations on ${target}...`);
 
   const pool = getPool();
 

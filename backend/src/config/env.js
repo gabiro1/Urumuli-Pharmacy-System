@@ -20,24 +20,70 @@ function numeric(key, defaultValue) {
   return value ? parseInt(value, 10) : defaultValue;
 }
 
-export const env = {
-  NODE_ENV: optional('NODE_ENV', 'development'),
-  PORT: numeric('PORT', 4000),
+function trueish(value) {
+  if (value === undefined || value === '') return undefined;
+  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
+}
 
-  DB: {
+function parseConnectionUrl(url) {
+  const parsed = new URL(url);
+  return {
+    HOST: parsed.hostname,
+    PORT: parsed.port ? parseInt(parsed.port, 10) : 5432,
+    NAME: parsed.pathname.replace(/^\//, ''),
+    USER: parsed.username ? decodeURIComponent(parsed.username) : '',
+    PASSWORD: parsed.password ? decodeURIComponent(parsed.password) : '',
+  };
+}
+
+function resolveDatabaseConfig() {
+  const url = optional('DATABASE_URL', optional('POSTGRES_URL', ''));
+
+  if (url) {
+    const parsed = parseConnectionUrl(url);
+    const sslOverride = trueish(process.env.DB_SSL);
+    return {
+      ...parsed,
+      URL: url,
+      MAX_POOL: numeric('DB_MAX_POOL', 20),
+      // Managed providers (Render/Supabase/Neon) require SSL. Allow override via DB_SSL.
+      SSL: sslOverride === undefined ? true : sslOverride,
+    };
+  }
+
+  return {
     HOST: required('DB_HOST'),
     PORT: numeric('DB_PORT', 5432),
     NAME: required('DB_NAME'),
     USER: required('DB_USER'),
     PASSWORD: required('DB_PASSWORD'),
+    URL: '',
     MAX_POOL: numeric('DB_MAX_POOL', 20),
-  },
+    SSL: trueish(process.env.DB_SSL) === true,
+  };
+}
 
-  REDIS: {
-    HOST: required('REDIS_HOST'),
+function resolveRedisConfig() {
+  const url = optional('REDIS_URL', '');
+  const host = process.env.REDIS_HOST;
+  if (url) {
+    return { URL: url, CONFIGURED: true };
+  }
+  return {
+    HOST: optional('REDIS_HOST', 'localhost'),
     PORT: numeric('REDIS_PORT', 6379),
     PASSWORD: optional('REDIS_PASSWORD', ''),
-  },
+    CONFIGURED: Boolean(host),
+  };
+}
+
+export const env = {
+  NODE_ENV: optional('NODE_ENV', 'development'),
+  PORT: numeric('PORT', 4000),
+
+  DB: resolveDatabaseConfig(),
+
+  REDIS: resolveRedisConfig(),
 
   JWT: {
     SECRET: required('JWT_SECRET'),

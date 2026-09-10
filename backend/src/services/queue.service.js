@@ -9,7 +9,9 @@ function getRedisConfig() {
     redis: {
       port: client.options.port,
       host: client.options.host,
+      username: client.options.username || undefined,
       password: client.options.password || undefined,
+      ...(client.options.tls ? { tls: client.options.tls } : {}),
     },
   };
 }

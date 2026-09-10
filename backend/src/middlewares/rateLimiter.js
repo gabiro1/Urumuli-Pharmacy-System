@@ -1,9 +1,14 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { MemoryStore } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { env } from '../config/env.js';
 import { getRedisClient } from '../config/redis.js';
 
-function createRedisStore(prefix) {
+function createStore(prefix) {
+  // Without a configured Redis the API still works using an in-process store.
+  if (!env.REDIS.CONFIGURED) {
+    console.warn('[RATE-LIMIT] Redis not configured; using in-memory store.');
+    return new MemoryStore();
+  }
   const client = getRedisClient();
   return new RedisStore({
     sendCommand: (...args) => client.call(...args),
@@ -21,7 +26,7 @@ export function createRateLimiter(windowMs, max, message, prefix = 'rl:global:',
     },
     standardHeaders: true,
     legacyHeaders: false,
-    store: createRedisStore(prefix),
+    store: createStore(prefix),
     keyGenerator: (req) => req.user?.userId || req.ip,
     skip: skipFn || ((req) => req.path === '/health'),
     ...options,
