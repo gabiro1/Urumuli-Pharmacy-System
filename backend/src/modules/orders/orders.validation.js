@@ -1,17 +1,9 @@
 import Joi from 'joi';
 
-export const requestOtpSchema = Joi.object({
-  phone: Joi.string().pattern(/^\+?[0-9]{9,15}$/).required(),
-  purpose: Joi.string().valid('ORDER_ACCESS').default('ORDER_ACCESS'),
-});
-export const verifyOtpSchema = Joi.object({
-  phone: Joi.string().pattern(/^\+?[0-9]{9,15}$/).required(), code: Joi.string().length(6).pattern(/^\d+$/).required(),
-  fullName: Joi.string().trim().min(2).max(200), email: Joi.string().email().allow('', null),
-});
 export const createOrderSchema = Joi.object({
   items: Joi.array().min(1).max(30).items(Joi.object({ medicineId:Joi.string().uuid().required(), quantity:Joi.number().integer().min(1).max(99).required() })).required(),
   fulfilmentMethod:Joi.string().valid('PICKUP','DELIVERY').required(), deliveryAddress:Joi.when('fulfilmentMethod',{is:'DELIVERY',then:Joi.string().trim().min(10).max(1000).required(),otherwise:Joi.string().allow('',null)}),
-  fullName:Joi.string().trim().min(2).max(200).required(), email:Joi.string().email().allow('',null), notificationChannel:Joi.string().valid('SMS','EMAIL','IN_APP').default('SMS'),
+  fullName:Joi.string().trim().min(2).max(200).required(), email:Joi.string().email().allow('',null), phone:Joi.string().pattern(/^\+?[0-9\s\-().]{9,20}$/).allow('',null), notificationChannel:Joi.string().valid('SMS','EMAIL','IN_APP').default('SMS'),
   paymentMethod:Joi.string().valid('CASH','CARD','MOBILE_MONEY','PAY_ON_PICKUP').required(), consent:Joi.boolean().valid(true).required(),
 });
 export const transitionSchema = Joi.object({ status:Joi.string().required(), reason:Joi.string().trim().max(1000), internalNote:Joi.string().trim().max(2000) });

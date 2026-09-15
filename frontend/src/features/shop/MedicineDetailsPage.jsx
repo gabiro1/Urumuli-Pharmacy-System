@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import api from '@/lib/api'
 import { useCartStore } from '@/stores/cartStore'
+import { usePatientAuthStore } from '@/stores/patientAuthStore'
 import PublicNavbar from '@/components/shared/PublicNavbar'
 import PublicFooter from '@/components/shared/PublicFooter'
 import { Button } from '@/components/ui/button'
@@ -81,6 +82,7 @@ export default function MedicineDetailsPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const addItem = useCartStore((s) => s.addItem)
+  const isAuthenticated = usePatientAuthStore((s) => s.isAuthenticated)
   const [quantity, setQuantity] = useState(1)
 
   const { data, isLoading, isError } = useQuery({
@@ -98,8 +100,12 @@ export default function MedicineDetailsPage() {
       navigate(`/medicines/${data.id}/prescription`)
       return
     }
+    if (!isAuthenticated) {
+      navigate('/login')
+      return
+    }
     addItem(data, quantity)
-    navigate('/cart')
+    navigate('/checkout')
   }
 
   const container = {

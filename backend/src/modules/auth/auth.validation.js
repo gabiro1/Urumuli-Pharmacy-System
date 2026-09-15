@@ -149,3 +149,11 @@ export const verifyTwoFactorSchema = z.object({
 export const verifyTwoFactorSetupSchema = z.object({
   code: z.string().trim().min(6, 'Code must be at least 6 characters').max(12),
 });
+
+export const googleSignInSchema = z.object({
+  idToken: z.string().min(1, 'Google ID token is required'),
+});
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1, 'Verification token is required'),
+});

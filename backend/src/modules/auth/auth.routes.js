@@ -21,12 +21,16 @@ import {
   resetPasswordSchema,
   verifyTwoFactorSchema,
   verifyTwoFactorSetupSchema,
+  googleSignInSchema,
+  verifyEmailSchema,
 } from './auth.validation.js';
 import { ROLES } from '../../constants.js';
 
 const router = Router();
 
 router.post('/login', authLimiter, validate(loginSchema), authController.login);
+router.post('/google', authLimiter, validate(googleSignInSchema), authController.googleSignIn);
+router.post('/verify-email', authLimiter, validate(verifyEmailSchema), authController.verifyEmail);
 // Second factor verification after a login that requires 2FA (uses a temp token).
 router.post('/verify-2fa', authLimiter, validate(verifyTwoFactorSchema), authController.verifyTwoFactorLogin);
 // Staff 2FA management (setup / verify / disable).

@@ -113,4 +113,15 @@ export const env = {
   PAYMENT_PROVIDER: optional('PAYMENT_PROVIDER', 'development'),
   ORDER_SIGNING_SECRET: optional('ORDER_SIGNING_SECRET', optional('JWT_SECRET', '')),
   RESERVATION_MINUTES: numeric('RESERVATION_MINUTES', 30),
+
+  GOOGLE_CLIENT_ID: optional('GOOGLE_CLIENT_ID', ''),
+
+  EMAIL: {
+    USER: optional('EMAIL_USER', ''),
+    APP_PASSWORD: optional('EMAIL_APP_PASSWORD', ''),
+    FROM: optional('EMAIL_FROM', ''),
+    VERIFICATION_TTL_MS: numeric('EMAIL_VERIFICATION_TTL_MS', 24 * 60 * 60 * 1000),
+  },
+
+  PUBLIC_URL: optional('PUBLIC_URL', 'http://localhost:5173'),
 };

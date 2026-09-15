@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import api from '@/lib/api'
+import { useCartStore } from '@/stores/cartStore'
 
 export const usePatientAuthStore = create(
   persist(
@@ -22,6 +23,7 @@ export const usePatientAuthStore = create(
         set({ user, accessToken, refreshToken, isAuthenticated: true })
         localStorage.setItem('patientAccessToken', accessToken)
         localStorage.setItem('patientRefreshToken', refreshToken)
+        useCartStore.getState().hydrate()
       },
 
       register: async (userData) => {
@@ -30,6 +32,7 @@ export const usePatientAuthStore = create(
         set({ user, accessToken, refreshToken, isAuthenticated: true })
         localStorage.setItem('patientAccessToken', accessToken)
         localStorage.setItem('patientRefreshToken', refreshToken)
+        useCartStore.getState().hydrate()
         return user
       },
 
@@ -40,6 +43,7 @@ export const usePatientAuthStore = create(
         localStorage.removeItem('patientAccessToken')
         localStorage.removeItem('patientRefreshToken')
         set({ user: null, profile: null, accessToken: null, refreshToken: null, isAuthenticated: false })
+        useCartStore.getState().clear()
       },
 
       updateTokens: (accessToken, refreshToken, user) =>

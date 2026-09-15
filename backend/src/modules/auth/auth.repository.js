@@ -40,6 +40,21 @@ export async function createPatientProfile(userId, profileData) {
   );
 }
 
+export async function createIdentityForUser(userId, phone, fullName, email) {
+  return queryOne(
+    `INSERT INTO patient_identities (user_id, verified_phone, full_name, email, profile_completion_status)
+     VALUES ($1, $2, $3, $4, 'COMPLETE')
+     ON CONFLICT (verified_phone) DO UPDATE SET
+       user_id = EXCLUDED.user_id,
+       full_name = COALESCE(EXCLUDED.full_name, patient_identities.full_name),
+       email = COALESCE(EXCLUDED.email, patient_identities.email),
+       profile_completion_status = 'COMPLETE',
+       verified_at = NOW()
+     RETURNING *`,
+    [userId, phone, fullName || null, email || null]
+  );
+}
+
 export async function getPatientProfile(userId) {
   return queryOne(
     `SELECT pp.*, u.email, u.first_name, u.last_name, u.phone, u.created_at
@@ -414,5 +429,52 @@ export async function expireStaleInvitations() {
     `UPDATE staff_invitations
      SET status = 'EXPIRED', updated_at = NOW()
      WHERE status = 'PENDING' AND expires_at < NOW()`
+  );
+}
+
+export async function findByProvider(provider, providerId) {
+  return queryOne(
+    `SELECT ${userFields} FROM users WHERE auth_provider = $1 AND auth_provider_id = $2`,
+    [provider, providerId]
+  );
+}
+
+export async function linkGoogleAuth(userId, googleId) {
+  return queryOne(
+    `UPDATE users SET auth_provider = 'google', auth_provider_id = $1, updated_at = NOW()
+     WHERE id = $2 RETURNING ${userFields}`,
+    [googleId, userId]
+  );
+}
+
+export async function setEmailVerificationToken(userId, tokenHash, expiresAt) {
+  return query(
+    `UPDATE users
+     SET email_verification_token_hash = $1, email_verification_expires_at = $2, updated_at = NOW()
+     WHERE id = $3`,
+    [tokenHash, expiresAt, userId]
+  );
+}
+
+export async function findByEmailVerificationToken(tokenHash) {
+  return queryOne(
+    `SELECT ${userFields} FROM users
+     WHERE email_verification_token_hash = $1
+       AND email_verification_expires_at > NOW()
+       AND is_active = true`,
+    [tokenHash]
+  );
+}
+
+export async function markEmailVerified(userId) {
+  return queryOne(
+    `UPDATE users
+     SET email_verified_at = NOW(),
+         email_verification_token_hash = NULL,
+         email_verification_expires_at = NULL,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING ${userFields}`,
+    [userId]
   );
 }

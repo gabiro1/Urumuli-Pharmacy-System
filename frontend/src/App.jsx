@@ -1,6 +1,8 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Routes, Route, useParams } from 'react-router-dom'
 import { Skeleton } from '@/components/ui/skeleton'
+import AuthModal from '@/components/auth/AuthModal'
+import { useCartStore } from '@/stores/cartStore'
 import { DashboardLayout } from '@/app/DashboardLayout'
 import { ProtectedRoute } from '@/app/ProtectedRoute'
 import { PatientLayout } from '@/features/patient/PatientLayout'
@@ -21,7 +23,6 @@ const AnalyticsPage = lazy(() => import('@/features/analytics/pages/AnalyticsPag
 const SearchPage = lazy(() => import('@/features/search/pages/SearchPage'))
 const PublicMedicinesPage = lazy(() => import('@/features/search/pages/PublicMedicinesPage'))
 const MedicineDetailsPage = lazy(() => import('@/features/shop/MedicineDetailsPage'))
-const CartPage = lazy(() => import('@/features/shop/CartPage'))
 const CheckoutPage = lazy(() => import('@/features/shop/CheckoutPage'))
 const OrderTrackingPage = lazy(() => import('@/features/shop/OrderTrackingPage'))
 const DispensingLabelPage = lazy(() => import('@/features/shop/DispensingLabelPage'))
@@ -35,6 +36,7 @@ const PharmacyManagementPage = lazy(() => import('@/features/admin/pages/Pharmac
 const ProfessionalCredentialsPage = lazy(() => import('@/features/pharmacist/pages/ProfessionalCredentialsPage'))
 const PartnersPage = lazy(() => import('@/features/admin/pages/PartnersPage'))
 const AcceptInvitationPage = lazy(() => import('@/features/auth/pages/AcceptInvitationPage'))
+const EmailVerificationPage = lazy(() => import('@/features/auth/pages/EmailVerificationPage'))
 const NotFoundPage = lazy(() => import('@/features/not-found/pages/NotFoundPage'))
 
 const PatientRegisterPage = lazy(() => import('@/features/patient/pages/PatientRegisterPage'))
@@ -95,8 +97,16 @@ function InboxRedirect() {
 }
 
 export default function App() {
+  useEffect(() => {
+    if (localStorage.getItem('patientAccessToken')) {
+      useCartStore.getState().hydrate()
+    }
+  }, [])
+
   return (
-    <Suspense fallback={<PageLoader />}>
+    <>
+      <AuthModal />
+      <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/dashboard" element={<Navigate to="/app" replace />} />
         <Route path="/prescriptions" element={<Navigate to="/app/prescriptions" replace />} />
@@ -112,6 +122,7 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-otp" element={<OtpVerificationPage />} />
+        <Route path="/verify-email" element={<EmailVerificationPage />} />
         <Route path="/" element={<LandingPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/services" element={<ServicesPage />} />
@@ -119,7 +130,6 @@ export default function App() {
         <Route path="/medicines" element={<PublicMedicinesPage />} />
         <Route path="/medicines/:id" element={<MedicineDetailsPage />} />
         <Route path="/medicines/:id/prescription" element={<PrescriptionRequestPage />} />
-        <Route path="/cart" element={<CartPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/orders/:id" element={<OrderTrackingPage />} />
         <Route path="/orders/:id/label" element={<DispensingLabelPage />} />
@@ -218,7 +228,8 @@ export default function App() {
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+    </>
   )
 }

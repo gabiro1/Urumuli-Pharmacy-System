@@ -56,9 +56,7 @@ api.interceptors.request.use((config) => {
     delete config.headers['Content-Type']
   }
   const keys = sessionKeys()
-  const token = currentWorkspace() === 'public'
-    ? localStorage.getItem(keys.access) || localStorage.getItem('guestAccessToken')
-    : localStorage.getItem(keys.access)
+  const token = localStorage.getItem(keys.access)
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -90,7 +88,6 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch {
         await clearActiveSession()
-        localStorage.removeItem('guestAccessToken')
         return Promise.reject(error)
       }
     }

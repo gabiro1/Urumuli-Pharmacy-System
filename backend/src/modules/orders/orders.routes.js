@@ -4,17 +4,14 @@ import * as controller from './orders.controller.js';
 import { authenticate } from '../../middlewares/authenticate.js';
 import { authorize } from '../../middlewares/authorize.js';
 import { validate } from '../../middlewares/validate.js';
-import { authLimiter } from '../../middlewares/rateLimiter.js';
 import { env } from '../../config/env.js';
 import { ROLES } from '../../constants.js';
-import { createOrderSchema, instructionSchema, requestOtpSchema, transitionSchema, verifyOtpSchema } from './orders.validation.js';
+import { createOrderSchema, instructionSchema, transitionSchema } from './orders.validation.js';
 
 const router=Router();
 // File type is determined from its bytes in the service. Browser supplied MIME
 // labels are frequently missing or wrong for HEIC, TIFF, and Office files.
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:env.MAX_FILE_SIZE,files:env.MAX_PRESCRIPTION_FILES}});
-router.post('/otp/request',authLimiter,validate(requestOtpSchema),controller.requestOtp);
-router.post('/otp/verify',authLimiter,validate(verifyOtpSchema),controller.verifyOtp);
 router.use(authenticate);
 router.post('/',validate(createOrderSchema),controller.createOrder);
 router.get('/my',controller.myOrders);

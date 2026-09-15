@@ -3,21 +3,18 @@ import { query, queryOne } from '../../config/database.js';
 export const findIdentityByPhone = (phone) => queryOne('SELECT * FROM patient_identities WHERE verified_phone = $1', [phone]);
 export const findIdentityById = (id) => queryOne('SELECT * FROM patient_identities WHERE id = $1', [id]);
 export const findIdentityByUser = (id) => queryOne('SELECT * FROM patient_identities WHERE user_id = $1', [id]);
-export const upsertIdentity = (phone, fullName, email) => queryOne(
-  `INSERT INTO patient_identities (verified_phone, full_name, email) VALUES ($1,$2,$3)
-   ON CONFLICT (verified_phone) DO UPDATE SET verified_at=NOW(), verification_status='VERIFIED',
-     full_name=COALESCE(EXCLUDED.full_name, patient_identities.full_name), email=COALESCE(EXCLUDED.email, patient_identities.email)
-   RETURNING *`, [phone, fullName || null, email || null]
+export const createIdentityForUser = (userId, phone, fullName, email) => queryOne(
+  `INSERT INTO patient_identities (user_id, verified_phone, full_name, email, profile_completion_status)
+   VALUES ($1,$2,$3,$4,'COMPLETE')
+   ON CONFLICT (verified_phone) DO UPDATE SET
+     user_id=EXCLUDED.user_id,
+     full_name=COALESCE(EXCLUDED.full_name, patient_identities.full_name),
+     email=COALESCE(EXCLUDED.email, patient_identities.email),
+     profile_completion_status='COMPLETE',
+     verified_at=NOW()
+   RETURNING *`,
+  [userId, phone, fullName || null, email || null]
 );
-export const latestOtp = (phone, purpose) => queryOne(
-  `SELECT * FROM otp_challenges WHERE phone=$1 AND purpose=$2 ORDER BY created_at DESC LIMIT 1`, [phone, purpose]
-);
-export const createOtp = (data) => queryOne(
-  `INSERT INTO otp_challenges(phone,purpose,code_hash,max_attempts,expires_at) VALUES($1,$2,$3,$4,$5) RETURNING id,phone,purpose,expires_at,created_at`,
-  [data.phone,data.purpose,data.codeHash,data.maxAttempts,data.expiresAt]
-);
-export const consumeOtp = (id) => queryOne('UPDATE otp_challenges SET consumed_at=NOW() WHERE id=$1 RETURNING *', [id]);
-export const incrementOtpAttempts = (id) => queryOne('UPDATE otp_challenges SET attempts=attempts+1 WHERE id=$1 RETURNING attempts,max_attempts', [id]);
 
 export async function getMedicine(id, client = null) {
   const sql = `SELECT m.*, c.name category_name FROM medicines m LEFT JOIN categories c ON c.id=m.category_id WHERE m.id=$1 AND m.is_active=true`;

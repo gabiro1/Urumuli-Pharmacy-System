@@ -6,6 +6,7 @@ import api from '@/lib/api'
 import PublicNavbar from '@/components/shared/PublicNavbar'
 import { useCartStore } from '@/stores/cartStore'
 import { usePrescriptionDraftStore } from '@/stores/prescriptionDraftStore'
+import { usePatientAuthStore } from '@/stores/patientAuthStore'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -15,6 +16,7 @@ export default function PrescriptionRequestPage() {
   const navigate = useNavigate()
   const addItem = useCartStore((state) => state.addItem)
   const setDraft = usePrescriptionDraftStore((state) => state.setDraft)
+  const isAuthenticated = usePatientAuthStore((state) => state.isAuthenticated)
   const [files, setFiles] = useState([])
   const [error, setError] = useState('')
   const medicineQuery = useQuery({ queryKey: ['prescription-medicine', id], queryFn: () => api.get(`/inventory/medicines/${id}`).then((r) => r.data.data) })
@@ -30,6 +32,10 @@ export default function PrescriptionRequestPage() {
     setFiles(next)
   }
   const continueRequest = () => {
+    if (!isAuthenticated) {
+      navigate('/login')
+      return
+    }
     if (!files.length) return setError('Choose at least one prescription file before continuing.')
     addItem(medicineQuery.data, 1)
     setDraft(id, files)
@@ -49,7 +55,7 @@ export default function PrescriptionRequestPage() {
           {error && <p className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
           {files.length > 0 && <div className="mt-5 space-y-2">{files.map((file, index) => <div key={`${file.name}-${index}`} className="flex items-center gap-3 rounded-xl border bg-background p-3"><span className="rounded-lg bg-emerald-500/10 p-2 text-emerald-600"><FileCheck2 className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{file.name}</p><p className="text-xs text-muted-foreground">{Math.ceil(file.size / 1024)} KB</p></div><button aria-label="Remove file" onClick={() => setFiles(files.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div>)}</div>}
           <Button className="mt-6 h-12 w-full rounded-xl" disabled={!files.length} onClick={continueRequest}><FileText className="mr-2 h-4 w-4" />Continue with prescription</Button>
-        </CardContent></Card><div className="mt-5 flex gap-3 rounded-2xl border bg-card p-4 text-sm text-muted-foreground"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><p>Your files are submitted only after phone verification and are stored privately. Uploading does not approve the request or authorize a dose.</p></div>
+        </CardContent></Card><div className="mt-5 flex gap-3 rounded-2xl border bg-card p-4 text-sm text-muted-foreground"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><p>Your files are submitted securely and stored privately. Uploading does not approve the request or authorize a dose.</p></div>
       </section>
     </div>
   </main></div>

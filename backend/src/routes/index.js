@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutes from '../modules/auth/auth.routes.js';
+import cartRoutes from '../modules/cart/cart.routes.js';
 import prescriptionRoutes from '../modules/prescription/prescription.routes.js';
 import auditRoutes from '../modules/audit/audit.routes.js';
 import chatRoutes from '../modules/chat/chat.routes.js';
@@ -36,6 +37,7 @@ import { optionalAuth } from '../middlewares/authenticate.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
+router.use('/patient/cart', cartRoutes);
 router.use('/prescriptions', prescriptionRoutes);
 router.use('/audit', auditRoutes);
 router.use('/chat', chatRoutes);

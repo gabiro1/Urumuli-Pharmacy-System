@@ -3,8 +3,16 @@ import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/shared/Logo'
-import { ShoppingBag, Menu, X } from 'lucide-react'
-import { useCartStore } from '@/stores/cartStore'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
+import { Menu, X, User, LayoutDashboard, Package, Settings2, LogOut } from 'lucide-react'
+import { usePatientAuthStore } from '@/stores/patientAuthStore'
 
 function ThemeToggle() {
   const [theme, setTheme] = useState(() => {
@@ -69,7 +77,22 @@ function PublicNavbar() {
   const location = useLocation()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const cartCount = useCartStore((state) => state.items.reduce((sum, item) => sum + item.quantity, 0))
+  const isAuthenticated = usePatientAuthStore((state) => state.isAuthenticated)
+  const user = usePatientAuthStore((state) => state.user)
+  const logout = usePatientAuthStore((state) => state.logout)
+
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim()
+  const initials = [user?.firstName, user?.lastName]
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'P'
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/', { replace: true })
+  }
 
   useEffect(() => {
     function onScroll() {
@@ -123,20 +146,63 @@ function PublicNavbar() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link to="/cart" aria-label={`Cart with ${cartCount} items`} className="relative rounded-md p-2 text-muted-foreground transition-colors hover:text-foreground shrink-0">
-              <ShoppingBag className="h-5 w-5" />
-              {cartCount > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-center text-[10px] font-bold text-primary-foreground">{cartCount}</span>}
-            </Link>
             <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={() => navigate('/login')} className="hidden sm:inline-flex shrink-0">
-              Sign In
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => navigate('/login')} aria-label="Sign In" className="sm:hidden shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                <circle cx="12" cy="8" r="5" />
-                <path d="M20 21a8 8 0 0 0-16 0" />
-              </svg>
-            </Button>
+            {isAuthenticated ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    aria-label="Open account menu"
+                    className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-primary/10 text-sm font-bold text-foreground transition-colors hover:bg-primary/20"
+                  >
+                    {initials}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuLabel>
+                    <div className="flex flex-col">
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {fullName || 'Patient'}
+                      </span>
+                      <span className="truncate text-xs font-normal text-muted-foreground">
+                        {user?.email}
+                      </span>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate('/patient')}>
+                    <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/patient/orders')}>
+                    <Package className="mr-2 h-4 w-4" /> My orders
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/patient/profile')}>
+                    <User className="mr-2 h-4 w-4" /> Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/patient/settings')}>
+                    <Settings2 className="mr-2 h-4 w-4" /> Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleLogout}
+                    className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" /> Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/login')} className="hidden sm:inline-flex shrink-0">
+                  Sign In
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => navigate('/login')} aria-label="Sign In" className="sm:hidden shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                    <circle cx="12" cy="8" r="5" />
+                    <path d="M20 21a8 8 0 0 0-16 0" />
+                  </svg>
+                </Button>
+              </>
+            )}
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
               aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
@@ -173,9 +239,20 @@ function PublicNavbar() {
                 </Link>
               ))}
               <div className="pt-3 sm:hidden">
-                <Button className="w-full" onClick={() => navigate('/login')}>
-                  Sign In
-                </Button>
+                {isAuthenticated ? (
+                  <div className="space-y-2">
+                    <Button className="w-full" onClick={() => navigate('/patient')}>
+                      <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
+                    </Button>
+                    <Button variant="outline" className="w-full" onClick={handleLogout}>
+                      <LogOut className="mr-2 h-4 w-4" /> Sign out
+                    </Button>
+                  </div>
+                ) : (
+                  <Button className="w-full" onClick={() => navigate('/login')}>
+                    Sign In
+                  </Button>
+                )}
               </div>
             </div>
           </motion.div>

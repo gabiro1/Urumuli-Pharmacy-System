@@ -300,3 +300,23 @@ export async function resendInvitation(req, res, next) {
     next(error);
   }
 }
+
+export async function googleSignIn(req, res, next) {
+  try {
+    const { idToken } = req.body;
+    const result = await authService.googleSignIn(idToken, req.ip, req.get('User-Agent'));
+    return sendSuccess(res, result, 'Google sign-in successful');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function verifyEmail(req, res, next) {
+  try {
+    const { token } = req.body;
+    const result = await authService.verifyEmail(token, req.ip, req.get('User-Agent'));
+    return sendSuccess(res, result, 'Email verified successfully');
+  } catch (error) {
+    next(error);
+  }
+}

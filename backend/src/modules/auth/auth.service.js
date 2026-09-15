@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { env } from '../../config/env.js';
 import * as authRepository from './auth.repository.js';
 import { createAuditLog } from '../../middlewares/auditLogger.js';
@@ -9,6 +10,7 @@ import { ROLES, AUDIT_ACTION, AUDIT_ENTITY, INVITATION_TTL_HOURS, INVITATION_STA
 import { mapUser, mapUserSummary, mapRole, mapPatientSettings } from '../../utils/serializers.js';
 import { cacheRemember, cacheGet, cacheSet, cacheDelKey } from '../../services/redis.service.js';
 import { verifyTotp, hashBackupCode, generateSecret, generateBackupCodes } from '../../services/totp.service.js';
+import { sendVerificationEmail } from '../../services/mail.service.js';
 
 function refreshSessionKey(tokenHash) {
   return `auth:refresh:${tokenHash}`;
@@ -139,6 +141,15 @@ export async function register(userData, ipAddress, userAgent) {
     role: ROLES.PATIENT,
   });
 
+  if (userData.phone) {
+    await authRepository.createIdentityForUser(
+      user.id,
+      userData.phone,
+      [user.first_name, user.last_name].filter(Boolean).join(' '),
+      normalizedEmail
+    );
+  }
+
   await createAuditLog({
     userId: user.id,
     action: AUDIT_ACTION.CREATE,
@@ -184,6 +195,15 @@ export async function registerPatient(userData, ipAddress, userAgent) {
     address: userData.address,
   });
 
+  if (userData.phone) {
+    await authRepository.createIdentityForUser(
+      user.id,
+      userData.phone,
+      [user.first_name, user.last_name].filter(Boolean).join(' '),
+      normalizedEmail
+    );
+  }
+
   await createAuditLog({
     userId: user.id,
     action: AUDIT_ACTION.CREATE,
@@ -202,6 +222,159 @@ export async function registerPatient(userData, ipAddress, userAgent) {
   return {
     user: sanitizeUser(user),
     accessToken: generateAccessToken(user),
+    refreshToken,
+  };
+}
+
+export async function googleSignIn(idToken, ipAddress, userAgent) {
+  if (!env.GOOGLE_CLIENT_ID) {
+    throw new UnauthorizedError('Google sign-in is not configured');
+  }
+
+  const client = new OAuth2Client(env.GOOGLE_CLIENT_ID);
+  let ticket;
+  try {
+    ticket = await client.verifyIdToken({ idToken, audience: env.GOOGLE_CLIENT_ID });
+  } catch {
+    throw new UnauthorizedError('Invalid Google token');
+  }
+
+  const payload = ticket.getPayload();
+  if (!payload || !payload.email) {
+    throw new UnauthorizedError('Could not extract email from Google token');
+  }
+
+  const googleEmail = payload.email.toLowerCase();
+  const googleId = payload.sub;
+  const firstName = payload.given_name || '';
+  const lastName = payload.family_name || '';
+
+  // Check if a user already exists with this Google ID
+  let user = await authRepository.findByProvider('google', googleId);
+
+  if (user) {
+    // Existing Google-linked account. If it was created on a previous Google
+    // sign-in but never verified, resend the verification email instead of
+    // signing the user in.
+    if (!user.email_verified_at) {
+      return issueEmailVerification(user, ipAddress, userAgent);
+    }
+  } else {
+    // Check if a user exists with this email (a pre-existing local account)
+    user = await authRepository.findByEmail(googleEmail);
+
+    if (user) {
+      // Link Google auth to the existing local account. That account already
+      // passed registration, so no new verification step is introduced.
+      user = await authRepository.linkGoogleAuth(user.id, googleId);
+    } else {
+      // Create a brand-new patient account. It must verify its email address
+      // before it can sign in.
+      user = await authRepository.create({
+        email: googleEmail,
+        passwordHash: null,
+        firstName: firstName || 'Google',
+        lastName: lastName || 'User',
+        phone: null,
+        role: ROLES.PATIENT,
+      });
+
+      // Set OAuth columns on the new user
+      user = await authRepository.linkGoogleAuth(user.id, googleId);
+
+      await authRepository.createPatientProfile(user.id, {});
+
+      await createAuditLog({
+        userId: user.id,
+        action: AUDIT_ACTION.CREATE,
+        entity: AUDIT_ENTITY.USER,
+        entityId: user.id,
+        description: `Patient ${user.email} registered via Google`,
+        ipAddress,
+        userAgent,
+      });
+
+      return issueEmailVerification(user, ipAddress, userAgent);
+    }
+  }
+
+  await authRepository.updateLastLogin(user.id);
+
+  await createAuditLog({
+    userId: user.id,
+    action: AUDIT_ACTION.LOGIN,
+    entity: AUDIT_ENTITY.USER,
+    entityId: user.id,
+    description: `User ${user.email} logged in via Google`,
+    ipAddress,
+    userAgent,
+  });
+
+  const refreshToken = generateRefreshToken();
+  const refreshTokenHash = hashToken(refreshToken);
+  await authRepository.updateRefreshToken(user.id, refreshTokenHash);
+  await persistRefreshSession(user, refreshTokenHash);
+
+  return {
+    user: sanitizeUser(user),
+    accessToken: generateAccessToken(user),
+    refreshToken,
+  };
+}
+
+async function issueEmailVerification(user, ipAddress, userAgent) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(Date.now() + env.EMAIL.VERIFICATION_TTL_MS);
+  await authRepository.setEmailVerificationToken(user.id, tokenHash, expiresAt);
+
+  const verificationUrl = `${env.PUBLIC_URL}/verify-email?token=${token}`;
+
+  const result = await sendVerificationEmail({
+    to: user.email,
+    name: [user.first_name, user.last_name].filter(Boolean).join(' '),
+    verificationUrl,
+  });
+
+  if (result?.failed) {
+    console.error(
+      `[auth] Verification email could not be delivered to ${user.email}: ${result.reason}`
+    );
+  } else if (result?.skipped) {
+    console.log(`[auth] SMTP not configured. Verification link for ${user.email}: ${verificationUrl}`);
+  }
+
+  return {
+    requiresEmailVerification: true,
+    email: user.email,
+    ...(env.NODE_ENV === 'development' ? { verificationLink: verificationUrl } : {}),
+  };
+}
+
+export async function verifyEmail(token, ipAddress, userAgent) {
+  const user = await authRepository.findByEmailVerificationToken(hashToken(token));
+  if (!user) throw new UnauthorizedError('Verification link is invalid or has expired');
+
+  const verified = await authRepository.markEmailVerified(user.id);
+
+  await createAuditLog({
+    userId: user.id,
+    action: AUDIT_ACTION.UPDATE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: user.id,
+    description: `Email verified for ${user.email}`,
+    ipAddress,
+    userAgent,
+  });
+
+  const refreshToken = generateRefreshToken();
+  const refreshTokenHash = hashToken(refreshToken);
+  await authRepository.updateRefreshToken(user.id, refreshTokenHash);
+  await persistRefreshSession(verified, refreshTokenHash);
+
+  return {
+    user: sanitizeUser(verified),
+    accessToken: generateAccessToken(verified),
     refreshToken,
   };
 }

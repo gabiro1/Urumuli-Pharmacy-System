@@ -3,8 +3,6 @@ import * as service from './orders.service.js';
 import { sendCreated, sendSuccess } from '../../utils/response.js';
 import { ValidationError } from '../../utils/errors.js';
 
-export async function requestOtp(req,res,next){try{return sendSuccess(res,await service.requestOtp(req.body),'Verification code requested');}catch(e){next(e)}}
-export async function verifyOtp(req,res,next){try{return sendSuccess(res,await service.verifyOtp(req.body),'Phone verified');}catch(e){next(e)}}
 export async function createOrder(req,res,next){try{return sendCreated(res,await service.createOrder(req.body,req.user,req.get('Idempotency-Key')),'Order created');}catch(e){next(e)}}
 export async function getOrder(req,res,next){try{return sendSuccess(res,await service.getOrder(req.params.id,req.user));}catch(e){next(e)}}
 export async function myOrders(req,res,next){try{return sendSuccess(res,await service.listMyOrders(req.user));}catch(e){next(e)}}

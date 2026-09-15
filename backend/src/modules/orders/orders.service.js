@@ -1,35 +1,16 @@
 import crypto from 'crypto';
-import jwt from 'jsonwebtoken';
 import path from 'path';
 import fs from 'fs/promises';
 import { transaction } from '../../config/database.js';
 import { env } from '../../config/env.js';
 import { ORDER_STATUS } from '../../constants.js';
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../utils/errors.js';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../utils/errors.js';
 import * as repo from './orders.repository.js';
 import { canTransition, instructionErrors, orderTransitions } from './orderState.js';
 import { notifyOrderPatient } from '../../services/notification.service.js';
 
-const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const normalizePhone = (phone) => phone.replace(/[\s()-]/g,'');
-
-export async function requestOtp({ phone, purpose='ORDER_ACCESS' }) {
-  phone=normalizePhone(phone); const latest=await repo.latestOtp(phone,purpose);
-  if(latest && Date.now()-new Date(latest.created_at).getTime()<env.OTP.RESEND_COOLDOWN_SECONDS*1000) throw new ConflictError('Please wait before requesting another code');
-  const code=String(crypto.randomInt(0,1000000)).padStart(6,'0');
-  const challenge=await repo.createOtp({phone,purpose,codeHash:hash(code),maxAttempts:env.OTP.MAX_ATTEMPTS,expiresAt:new Date(Date.now()+env.OTP.TTL_SECONDS*1000)});
-  return { challenge, delivery: env.OTP.PROVIDER==='development' ? { status:'DEVELOPMENT_ONLY', code } : { status:'QUEUED' } };
-}
-
-export async function verifyOtp(data) {
-  const phone=normalizePhone(data.phone); const challenge=await repo.latestOtp(phone,'ORDER_ACCESS');
-  if(!challenge || challenge.consumed_at || new Date(challenge.expires_at)<=new Date()) throw new ValidationError('The verification code is invalid or expired');
-  if(challenge.attempts>=challenge.max_attempts) throw new ValidationError('Too many verification attempts. Request a new code.');
-  if(hash(data.code)!==challenge.code_hash){ await repo.incrementOtpAttempts(challenge.id); throw new ValidationError('The verification code is invalid or expired'); }
-  await repo.consumeOtp(challenge.id); const identity=await repo.upsertIdentity(phone,data.fullName,data.email);
-  const token=jwt.sign({patientIdentityId:identity.id,role:'GUEST',phone},env.JWT.SECRET,{expiresIn:'2h'});
-  return { token, identity };
-}
+const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 const assertOwner = async (order,user) => {
   const staff=['ADMIN','MANAGER','PHARMACIST','AUDITOR'].includes(user.role);
@@ -41,8 +22,13 @@ export const listMyOrders = async (user) => { const identityId=user.patientIdent
 export const listQueue = (params) => repo.listQueue(params);
 
 export async function createOrder(data,user,idempotencyKey){
-  const resolvedIdentityId=user.patientIdentityId||(await repo.findIdentityByUser(user.userId))?.id;
-  if(!resolvedIdentityId)throw new ForbiddenError('Verify your phone before checkout');
+  let resolvedIdentityId=user.patientIdentityId||(await repo.findIdentityByUser(user.userId))?.id;
+  if(!resolvedIdentityId && user.userId){
+    if(!data.phone)throw new ValidationError('A phone number is required to complete this order');
+    const identity=await repo.createIdentityForUser(user.userId,normalizePhone(data.phone),data.fullName||null,data.email||null);
+    resolvedIdentityId=identity.id;
+  }
+  if(!resolvedIdentityId)throw new ForbiddenError('A verified patient identity is required');
   if(!idempotencyKey)throw new ValidationError('Idempotency-Key header is required');
   return transaction(async(client)=>{
     const prior=(await client.query(`SELECT response_body FROM idempotency_records WHERE scope='CREATE_ORDER' AND idempotency_key=$1 AND owner_key=$2`,[idempotencyKey,resolvedIdentityId])).rows[0];

@@ -22,6 +22,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCartStore } from '@/stores/cartStore'
+import { usePatientAuthStore } from '@/stores/patientAuthStore'
 
 const RX_OPTIONS = [
   { value: 'all', label: 'All' },
@@ -177,6 +178,7 @@ function MedicineCardSkeleton() {
 export default function SearchPage({ publicMode = false }) {
   const navigate = useNavigate()
   const addItem = useCartStore((state) => state.addItem)
+  const isAuthenticated = usePatientAuthStore((state) => state.isAuthenticated)
   const [searchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -459,7 +461,7 @@ export default function SearchPage({ publicMode = false }) {
               index={index}
               publicMode={publicMode}
               onView={() => navigate(`/medicines/${medicine.id}`)}
-              onAdd={() => { if (medicine.classification === 'PRESCRIPTION_REQUIRED' || medicine.requiresPrescription) { navigate(`/medicines/${medicine.id}/prescription`); return } addItem(medicine, 1); toast.success(`${medicine.name} added to your cart`) }}
+              onAdd={() => { if (medicine.classification === 'PRESCRIPTION_REQUIRED' || medicine.requiresPrescription) { navigate(`/medicines/${medicine.id}/prescription`); return } if (!isAuthenticated) { navigate('/login'); return } addItem(medicine, 1); toast.success(`${medicine.name} added to your cart`) }}
             />
           ))}
         </div>
