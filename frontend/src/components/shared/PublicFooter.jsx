@@ -16,8 +16,8 @@ function PublicFooter() {
               <span className="text-lg font-bold">Urumuli</span>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-              A complete pharmacy operations platform for inventory, sales,
-              prescriptions, and patient communication.
+              A simple way to find medicines, ask a pharmacist, and keep
+              every prescription and order update in one place.
             </p>
           </div>
           <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-8">
@@ -26,6 +26,7 @@ function PublicFooter() {
               <ul className="space-y-2">
                 {[
                   { label: 'Home', path: '/' },
+                  { label: 'Medicines', path: '/medicines' },
                   { label: 'Services', path: '/services' },
                   { label: 'About Us', path: '/about' },
                   { label: 'Contact', path: '/contact' },
@@ -44,7 +45,6 @@ function PublicFooter() {
                 {[
                   { label: 'Sign In', path: '/login' },
                   { label: 'Patient Registration', path: '/patient/register' },
-                  { label: 'Staff Registration', path: '/register' },
                 ].map((item) => (
                   <li key={item.label}>
                     <button onClick={() => navigate(item.path)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -55,12 +55,16 @@ function PublicFooter() {
               </ul>
             </div>
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold">Support</h4>
+              <h4 className="text-sm font-semibold">Patient help</h4>
               <ul className="space-y-2">
-                {['Help Center', 'FAQ', 'Privacy Policy', 'Terms of Service'].map((item) => (
-                  <li key={item}>
-                    <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                      {item}
+                {[
+                  { label: 'Find a medicine', path: '/medicines' },
+                  { label: 'Contact us', path: '/contact' },
+                  { label: 'Sign in', path: '/login' },
+                ].map((item) => (
+                  <li key={item.label}>
+                    <button onClick={() => navigate(item.path)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                      {item.label}
                     </button>
                   </li>
                 ))}

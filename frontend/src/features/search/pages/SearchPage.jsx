@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCartStore } from '@/stores/cartStore'
 import { usePatientAuthStore } from '@/stores/patientAuthStore'
+import AskPharmacistButton from '@/components/availability/AskPharmacistButton'
 
 const RX_OPTIONS = [
   { value: 'all', label: 'All' },
@@ -134,7 +135,7 @@ function MedicineCard({ medicine, index, publicMode, onView, onAdd }) {
               </p>
               <p className="max-w-36 text-[11px] text-muted-foreground">{medicine.packSize ? `Per ${medicine.sellingUnit || 'pack'} of ${medicine.packSize}` : medicine.sellingUnit || 'Per pack'}</p>
             </div>
-            <div className="flex flex-col gap-1.5"><Button variant="outline" size="sm" className="h-7 rounded-md px-2 text-xs" onClick={onView}>View <ArrowRight className="ml-1 h-3 w-3" /></Button>{publicMode&&!restricted&&stock.key!=='out'&&<Button size="sm" className="h-7 rounded-md px-2 text-xs" onClick={onAdd}>{isRx?<><Upload className="mr-1 h-3 w-3"/>Prescription</>:<><ShoppingCart className="mr-1 h-3 w-3"/>Add</>}</Button>}</div>
+            <div className="flex flex-col gap-1.5"><Button variant="outline" size="sm" className="h-7 rounded-md px-2 text-xs" onClick={onView}>View <ArrowRight className="ml-1 h-3 w-3" /></Button>{publicMode && !restricted && stock.key === 'out' && <AskPharmacistButton medicineId={medicine.id} medicineName={medicine.name} label="Ask pharmacist" variant="ghost" size="sm" className="h-7 rounded-md px-2 text-xs" />}{publicMode&&!restricted&&stock.key!=='out'&&<Button size="sm" className="h-7 rounded-md px-2 text-xs" onClick={onAdd}>{isRx?<><Upload className="mr-1 h-3 w-3"/>Prescription</>:<><ShoppingCart className="mr-1 h-3 w-3"/>Add</>}</Button>}</div>
           </div>
         </div>
       </div>
@@ -450,6 +451,16 @@ export default function SearchPage({ publicMode = false }) {
             <Button variant="outline" size="sm" className="mt-5" onClick={resetFilters}>
               Clear filters
             </Button>
+            {publicMode && debouncedSearch.trim().length >= 2 &&
+              categoryFilter === 'all' && rxFilter === 'all' && availabilityFilter === 'all' && dosageFormFilter === 'all' && (
+                <div className="mt-8 flex flex-col items-center gap-3">
+                  <p className="max-w-sm text-sm leading-6 text-muted-foreground">
+                    Couldn&apos;t find <span className="font-semibold text-foreground">“{debouncedSearch}”</span> in
+                    the digital catalog? Our pharmacist can check if it is physically available at the pharmacy.
+                  </p>
+                  <AskPharmacistButton medicineName={debouncedSearch} label="Ask the pharmacist to check" />
+                </div>
+              )}
           </CardContent>
         </Card>
       ) : (

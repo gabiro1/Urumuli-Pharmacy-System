@@ -54,7 +54,17 @@ export const usePatientAuthStore = create(
 
       fetchProfile: async () => {
         const { data } = await api.get('/auth/patient/profile')
-        set({ profile: data.data })
+        set((state) => ({
+          profile: data.data,
+          user: state.user ? {
+            ...state.user,
+            firstName: data.data.first_name ?? state.user.firstName,
+            lastName: data.data.last_name ?? state.user.lastName,
+            email: data.data.email ?? state.user.email,
+            phone: data.data.phone ?? state.user.phone,
+            avatar: data.data.avatar ?? state.user.avatar,
+          } : state.user,
+        }))
         return data.data
       },
 
@@ -69,10 +79,16 @@ export const usePatientAuthStore = create(
             lastName: profile.last_name ?? state.user.lastName,
             email: profile.email ?? state.user.email,
             phone: profile.phone ?? state.user.phone,
+            avatar: profile.avatar ?? state.user.avatar,
           } : state.user,
         }))
         return data.data
       },
+
+      updateAvatar: (avatar) => set((state) => ({
+        profile: state.profile ? { ...state.profile, avatar } : state.profile,
+        user: state.user ? { ...state.user, avatar } : state.user,
+      })),
     }),
     {
       name: 'patient-auth-storage',

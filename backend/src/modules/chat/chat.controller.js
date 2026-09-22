@@ -88,7 +88,7 @@ export async function closeConversation(req, res, next) {
 
 export async function reopenConversation(req, res, next) {
   try {
-    const result = await chatService.reopenConversation(req.params.id, req.user.userId, req.ip, req.get('User-Agent'));
+    const result = await chatService.reopenConversation(req.params.id, req.user.userId, req.user.role, req.ip, req.get('User-Agent'));
     return sendSuccess(res, result, 'Conversation reopened');
   } catch (error) {
     next(error);
@@ -97,7 +97,7 @@ export async function reopenConversation(req, res, next) {
 
 export async function markAsRead(req, res, next) {
   try {
-    await chatService.markAsRead(req.params.id, req.user.userId);
+    await chatService.markAsRead(req.params.id, req.user.userId, req.user.role);
     return sendSuccess(res, null, 'Marked as read');
   } catch (error) {
     next(error);

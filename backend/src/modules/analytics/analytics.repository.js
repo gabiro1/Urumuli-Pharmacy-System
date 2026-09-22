@@ -94,6 +94,19 @@ export async function getProfitSummary({ days = 30 } = {}) {
   return { totals, daily };
 }
 
+export async function getAvailabilitySummary() {
+  return queryOne(
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE verification_status = 'PENDING')::int AS pending,
+       COUNT(*) FILTER (WHERE verification_status = 'PHYSICALLY_AVAILABLE')::int AS physically_available,
+       COUNT(*) FILTER (WHERE verification_status = 'PHYSICALLY_UNAVAILABLE')::int AS physically_unavailable,
+       COUNT(*) FILTER (WHERE verification_status = 'INVENTORY_UPDATED')::int AS inventory_updated,
+       COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days')::int AS last_7_days
+     FROM medicine_availability_requests`
+  );
+}
+
 export async function getDemandForecast({ days = 30, horizon = 14, top = 10 } = {}) {
   const rows = await query(
     `WITH recent AS (

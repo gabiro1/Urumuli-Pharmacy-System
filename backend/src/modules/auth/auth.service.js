@@ -1,11 +1,13 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import path from 'path';
+import fs from 'fs/promises';
 import { OAuth2Client } from 'google-auth-library';
 import { env } from '../../config/env.js';
 import * as authRepository from './auth.repository.js';
 import { createAuditLog } from '../../middlewares/auditLogger.js';
-import { UnauthorizedError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors.js';
+import { UnauthorizedError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../utils/errors.js';
 import { ROLES, AUDIT_ACTION, AUDIT_ENTITY, INVITATION_TTL_HOURS, INVITATION_STATUS } from '../../constants.js';
 import { mapUser, mapUserSummary, mapRole, mapPatientSettings } from '../../utils/serializers.js';
 import { cacheRemember, cacheGet, cacheSet, cacheDelKey } from '../../services/redis.service.js';
@@ -405,7 +407,7 @@ export async function refreshTokens(refreshToken, _ipAddress, _userAgent) {
   return {
     user: sanitizeUser(user),
     accessToken: generateAccessToken(user),
-    refreshToken,
+    refreshToken: newRefreshToken,
   };
 }
 
@@ -610,6 +612,45 @@ export async function updatePatientProfile(userId, data) {
     }
   }
   return authRepository.updatePatientProfile(userId, data);
+}
+
+function identifyProfileAvatar(file) {
+  const buffer = file?.buffer;
+  if (!buffer?.length) throw new ValidationError('Choose a profile photo to upload');
+
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return { extension: '.jpg', mimeType: 'image/jpeg' };
+  }
+  if (buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    return { extension: '.png', mimeType: 'image/png' };
+  }
+  if (buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
+    return { extension: '.webp', mimeType: 'image/webp' };
+  }
+  if (['GIF87a', 'GIF89a'].includes(buffer.toString('ascii', 0, 6))) {
+    return { extension: '.gif', mimeType: 'image/gif' };
+  }
+
+  throw new ValidationError('Unsupported profile photo. Upload a JPG, PNG, WebP, or GIF image');
+}
+
+export async function uploadPatientAvatar(userId, file) {
+  const detected = identifyProfileAvatar(file);
+  const directory = path.resolve(env.UPLOAD_DIR, 'profile-avatars');
+  await fs.mkdir(directory, { recursive: true });
+
+  const fileName = `${userId}-${crypto.randomUUID()}${detected.extension}`;
+  const storageKey = `profile-avatars/${fileName}`;
+  const absolutePath = path.resolve(env.UPLOAD_DIR, storageKey);
+  await fs.writeFile(absolutePath, file.buffer, { flag: 'wx' });
+
+  try {
+    await authRepository.updatePatientAvatar(userId, `/uploads/${storageKey}`);
+    return authRepository.getPatientProfile(userId);
+  } catch (error) {
+    await fs.unlink(absolutePath).catch(() => {});
+    throw error;
+  }
 }
 
 export async function getPatientSettings(userId) {
@@ -901,4 +942,43 @@ export async function resendInvitation(invitationId, actorId, ipAddress, userAge
     result.inviteUrl = `${env.PUBLIC_URL || 'http://localhost:5173'}/accept-invite?token=${newToken}`;
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Data protection
+// ---------------------------------------------------------------------------
+
+export async function exportPatientData(userId) {
+  const user = await authRepository.findById(userId);
+  if (!user) throw new NotFoundError('User not found');
+
+  const data = await authRepository.collectPatientData(userId);
+  return {
+    generatedAt: new Date().toISOString(),
+    requestedBy: user.id,
+    data,
+  };
+}
+
+export async function deletePatientAccount(userId, ipAddress, userAgent) {
+  const user = await authRepository.findById(userId);
+  if (!user) throw new NotFoundError('User not found');
+  if (user.role !== ROLES.PATIENT) {
+    throw new ForbiddenError('Account erasure is only available to patients');
+  }
+
+  const result = await authRepository.anonymizePatientAccount(userId);
+
+  await createAuditLog({
+    userId,
+    action: AUDIT_ACTION.DELETE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: userId,
+    description: 'Patient account anonymized (right to erasure)',
+    metadata: { anonymized: true },
+    ipAddress,
+    userAgent,
+  });
+
+  return { deleted: true, confirmation: 'Your account has been anonymized. Clinical records are retained anonymously for regulatory purposes.' };
 }

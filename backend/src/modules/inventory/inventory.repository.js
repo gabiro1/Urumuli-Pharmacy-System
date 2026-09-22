@@ -88,7 +88,7 @@ export async function listMedicines({ limit, offset, search, categoryId, require
   const normalizedSortOrder = sortOrder === 'DESC' ? 'DESC' : 'ASC';
 
   const relevanceExpr = hasSearch
-    ? `ts_rank_cd(m.search_vector, plainto_tsquery('english', ${JSON.stringify(search)}))`
+    ? "ts_rank_cd(m.search_vector, plainto_tsquery('english', $1))"
     : '0';
 
   const countResult = await queryOne(

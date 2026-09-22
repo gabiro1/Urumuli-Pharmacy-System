@@ -84,6 +84,7 @@ export default function PrescriptionDetailPage() {
   const [rejectDialog, setRejectDialog] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [pharmacistNotes, setPharmacistNotes] = useState('')
+  const [isOpeningFile, setIsOpeningFile] = useState(false)
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['prescription', id],
@@ -106,6 +107,34 @@ export default function PrescriptionDetailPage() {
       toast.error(err.response?.data?.message || 'Failed to update prescription')
     },
   })
+
+  const handleViewDocument = async () => {
+    if (!prescription?.fileUrl && !prescription?.file_url) return
+
+    setIsOpeningFile(true)
+    try {
+      const response = await api.get(prescription.fileUrl || prescription.file_url, {
+        responseType: 'blob',
+      })
+      const objectUrl = URL.createObjectURL(response.data)
+      const popup = window.open('', '_blank', 'noopener,noreferrer')
+      if (popup) {
+        popup.opener = null
+        popup.location.href = objectUrl
+      } else {
+        const link = document.createElement('a')
+        link.href = objectUrl
+        link.target = '_blank'
+        link.rel = 'noopener noreferrer'
+        link.click()
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Unable to open the prescription document')
+    } finally {
+      setIsOpeningFile(false)
+    }
+  }
 
   const prescription = data?.data || data
 
@@ -217,11 +246,9 @@ export default function PrescriptionDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           {(prescription.fileUrl || prescription.file_url) && (
-            <Button variant="outline" asChild>
-              <a href={prescription.fileUrl || prescription.file_url} target="_blank" rel="noopener noreferrer">
-                <ImageIcon className="w-4 h-4 mr-2" />
-                View Document
-              </a>
+            <Button variant="outline" onClick={handleViewDocument} disabled={isOpeningFile}>
+              {isOpeningFile ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ImageIcon className="w-4 h-4 mr-2" />}
+              {isOpeningFile ? 'Opening…' : 'View Document'}
             </Button>
           )}
         </div>

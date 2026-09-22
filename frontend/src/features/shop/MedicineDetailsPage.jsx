@@ -35,6 +35,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import AskPharmacistButton from '@/components/availability/AskPharmacistButton'
 
 const spring = { type: 'spring', stiffness: 220, damping: 24 }
 
@@ -91,6 +92,7 @@ export default function MedicineDetailsPage() {
   })
 
   const unavailable = data?.availabilityStatus === 'UNAVAILABLE'
+  const outOfStock = stock?.key === 'out'
   const rx = data?.classification === 'PRESCRIPTION_REQUIRED'
   const restricted = data?.classification === 'RESTRICTED'
   const stock = data ? getStock(data) : null
@@ -301,7 +303,7 @@ export default function MedicineDetailsPage() {
                         </div>
                       )}
                       <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} className="inline-flex">
-                        <Button size="lg" onClick={act} disabled={unavailable}>
+                        <Button size="lg" onClick={act} disabled={outOfStock}>
                           {rx ? (
                             <>
                               <Upload className="mr-2 h-5 w-5" />
@@ -315,10 +317,24 @@ export default function MedicineDetailsPage() {
                           )}
                         </Button>
                       </motion.div>
+                      {!restricted && outOfStock && (
+                        <AskPharmacistButton
+                          medicineId={data.id}
+                          medicineName={data.name}
+                          size="lg"
+                          label="Ask if physically available"
+                        />
+                      )}
                       {restricted && (
                         <Button size="lg" variant="outline" onClick={() => navigate('/contact')}>
                           Contact pharmacy
                         </Button>
+                      )}
+                      {outOfStock && !restricted && (
+                        <p className="w-full text-xs text-muted-foreground">
+                          Currently shown as unavailable in the digital catalog — a pharmacist can confirm what is on
+                          the shelves right now.
+                        </p>
                       )}
                     </motion.div>
                   </div>

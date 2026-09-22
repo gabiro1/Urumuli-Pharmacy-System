@@ -15,6 +15,7 @@ import api from '@/lib/api'
 import PublicNavbar from '@/components/shared/PublicNavbar'
 import PublicFooter from '@/components/shared/PublicFooter'
 import GoogleSignInButton from '@/components/auth/GoogleSignInButton'
+import TwoFactorChallenge from '@/components/auth/TwoFactorChallenge'
 import { getApiErrorMessage } from '@/lib/apiError'
 
 const loginSchema = z.object({
@@ -30,6 +31,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [serverError, setServerError] = useState(null)
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState(null)
 
   const {
     register,
@@ -40,6 +42,26 @@ export default function LoginPage() {
     defaultValues: { email: '', password: '', rememberMe: false },
   })
 
+  const completeLogin = (session) => {
+    const { user, accessToken, refreshToken } = session
+    const from =
+      searchParams.get('redirect') || location.state?.from?.pathname
+
+    let target
+    if (user.role === 'PATIENT') {
+      usePatientAuthStore
+        .getState()
+        .setSession(user, accessToken, refreshToken)
+      target = from && from.startsWith('/patient') ? from : '/patient'
+    } else {
+      useAuthStore.getState().setSession(user, accessToken, refreshToken)
+      target = !from || from.startsWith('/patient') ? '/app' : from
+    }
+
+    toast.success('Welcome back!')
+    navigate(target, { replace: true })
+  }
+
   const onSubmit = async (values) => {
     setIsSubmitting(true)
     setServerError(null)
@@ -48,25 +70,37 @@ export default function LoginPage() {
         email: values.email,
         password: values.password,
       })
-      const { user, accessToken, refreshToken } = data.data
-      const from =
-        searchParams.get('redirect') || location.state?.from?.pathname
-
-      let target
-      if (user.role === 'PATIENT') {
-        usePatientAuthStore
-          .getState()
-          .setSession(user, accessToken, refreshToken)
-        target = from && from.startsWith('/patient') ? from : '/patient'
-      } else {
-        useAuthStore.getState().setSession(user, accessToken, refreshToken)
-        target = !from || from.startsWith('/patient') ? '/app' : from
+      if (data.data?.requiresTwoFactor) {
+        setTwoFactorChallenge({
+          email: values.email,
+          tempToken: data.data.tempToken,
+        })
+        return
       }
 
-      toast.success('Welcome back!')
-      navigate(target, { replace: true })
+      completeLogin(data.data)
     } catch (err) {
       const message = getApiErrorMessage(err, 'Invalid email or password')
+      setServerError(message)
+      toast.error(message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const verifyTwoFactor = async (code) => {
+    if (!twoFactorChallenge) return
+
+    setIsSubmitting(true)
+    setServerError(null)
+    try {
+      const { data } = await api.post('/auth/verify-2fa', {
+        tempToken: twoFactorChallenge.tempToken,
+        code,
+      })
+      completeLogin(data.data)
+    } catch (err) {
+      const message = getApiErrorMessage(err, 'Invalid or expired authentication code')
       setServerError(message)
       toast.error(message)
     } finally {
@@ -177,7 +211,20 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          {twoFactorChallenge ? (
+            <TwoFactorChallenge
+              email={twoFactorChallenge.email}
+              onSubmit={verifyTwoFactor}
+              onBack={() => {
+                setTwoFactorChallenge(null)
+                setServerError(null)
+              }}
+              isSubmitting={isSubmitting}
+              error={serverError}
+            />
+          ) : (
+            <>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             {serverError && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -264,9 +311,9 @@ export default function LoginPage() {
                 'Sign in'
               )}
             </Button>
-          </form>
+              </form>
 
-          <div className="relative">
+              <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
@@ -275,9 +322,11 @@ export default function LoginPage() {
                 Or continue with
               </span>
             </div>
-          </div>
+              </div>
 
-          <GoogleSignInButton onSuccess={handleGoogleSuccess} />
+              <GoogleSignInButton onSuccess={handleGoogleSuccess} />
+            </>
+          )}
 
 
           <p className="text-center text-sm text-muted-foreground">

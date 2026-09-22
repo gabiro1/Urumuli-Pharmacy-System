@@ -15,12 +15,14 @@ const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:env.MAX_FIL
 router.use(authenticate);
 router.post('/',validate(createOrderSchema),controller.createOrder);
 router.get('/my',controller.myOrders);
+router.get('/payment-providers',controller.paymentProviders);
 router.get('/prescription-files/:fileId',controller.downloadPrescription);
 router.get('/queue',authorize(ROLES.ADMIN,ROLES.MANAGER,ROLES.PHARMACIST),controller.queue);
 router.get('/:id',controller.getOrder);
 router.post('/:id/prescription',upload.array('files',env.MAX_PRESCRIPTION_FILES),controller.uploadPrescription);
 router.post('/:id/confirm',controller.confirm);
 router.post('/:id/payment',controller.startPayment);
+router.get('/:id/payment',controller.paymentSummary);
 router.post('/:id/instructions',authorize(ROLES.ADMIN,ROLES.MANAGER,ROLES.PHARMACIST),validate(instructionSchema),controller.saveInstruction);
 router.post('/:id/transition',authorize(ROLES.ADMIN,ROLES.MANAGER,ROLES.PHARMACIST),validate(transitionSchema),controller.transition);
 export default router;

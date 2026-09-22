@@ -38,7 +38,17 @@ if (env.NODE_ENV !== 'test') {
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use('/uploads', express.static(path.resolve(env.UPLOAD_DIR)));
+// Only deliberately public assets are served statically. Prescription files,
+// insurance documents, and other patient uploads must go through an
+// authenticated controller instead of a catch-all upload directory.
+app.use('/uploads/products', express.static(path.resolve(env.UPLOAD_DIR, 'products'), {
+  index: false,
+  maxAge: '1d',
+}));
+app.use('/uploads/profile-avatars', express.static(path.resolve(env.UPLOAD_DIR, 'profile-avatars'), {
+  index: false,
+  maxAge: '1h',
+}));
 app.use(globalLimiter);
 
 app.use('/api/v1', routes);

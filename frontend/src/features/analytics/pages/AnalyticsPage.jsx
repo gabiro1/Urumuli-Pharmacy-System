@@ -11,6 +11,10 @@ import {
   TrendingUp,
   Boxes,
   ShoppingBag,
+  SearchCheck,
+  PackageCheck,
+  PackageX,
+  Clock3,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -89,6 +93,7 @@ export default function AnalyticsPage() {
   const prescriptions = overview.prescriptions || {}
   const profit = overview.profit || {}
   const demandForecast = overview.demandForecast || {}
+  const availability = overview.availability || {}
   const dailyRevenue = sales.dailyRevenue || []
   const topMedicines = sales.topMedicines || []
   const systemHealth = overview.systemHealth || []
@@ -117,6 +122,13 @@ export default function AnalyticsPage() {
         <CompactStat icon={Wallet} label="Gross Profit" value={Math.round(profit.grossProfit || 0)} variant="primary" />
         <CompactStat icon={Activity} label="Transactions" value={sales.totals?.totalSales} variant="info" />
         <CompactStat icon={FlaskConical} label="Prescriptions" value={prescriptions.total} variant="warning" />
+      </motion.div>
+
+      <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <CompactStat icon={SearchCheck} label="Availability Requests" value={availability.total} variant="primary" />
+        <CompactStat icon={Clock3} label="Pending Checks" value={availability.pending} variant="warning" />
+        <CompactStat icon={PackageCheck} label="Physically Available" value={availability.physicallyAvailable} variant="success" />
+        <CompactStat icon={PackageX} label="Not Available" value={availability.physicallyUnavailable} variant="danger" />
       </motion.div>
 
       <motion.div variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-3 gap-6">

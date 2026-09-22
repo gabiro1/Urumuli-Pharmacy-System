@@ -11,6 +11,12 @@ function currentWorkspace() {
   const path = window.location.pathname
   if (path.startsWith('/patient')) return 'patient'
   if (path.startsWith('/app')) return 'staff'
+  if (localStorage.getItem('patientAccessToken') || localStorage.getItem('patientRefreshToken')) {
+    return 'patient'
+  }
+  if (localStorage.getItem('accessToken') || localStorage.getItem('refreshToken')) {
+    return 'staff'
+  }
   return 'public'
 }
 

@@ -90,10 +90,10 @@ export async function listPatientConversations(patientId, { status, page = 1, li
   };
 }
 
-export async function listPharmacistConversations(pharmacistId, { status, page = 1, limit = 20 }) {
-  const conditions = ['c.assigned_pharmacist_id = $1'];
-  const params = [pharmacistId];
-  let idx = 2;
+export async function listPharmacistConversations(_pharmacistId, { status, page = 1, limit = 20 }) {
+  const conditions = ["c.status <> 'CLOSED'"];
+  const params = [];
+  let idx = 1;
 
   if (status) {
     conditions.push(`c.status = $${idx++}`);
@@ -119,7 +119,10 @@ export async function listPharmacistConversations(pharmacistId, { status, page =
      LEFT JOIN LATERAL (
        SELECT COUNT(*)::int AS unread_count
        FROM conversation_messages cm
-       WHERE cm.conversation_id = c.id AND cm.read_at IS NULL AND cm.sender_id != $1
+       WHERE cm.conversation_id = c.id
+         AND cm.read_at IS NULL
+         AND cm.sender_role = 'PATIENT'
+         AND cm.is_private_note = false
      ) uc ON true
      WHERE ${where}
      ORDER BY COALESCE(lm.last_message_at, c.updated_at) DESC
@@ -171,7 +174,10 @@ export async function listOpenConversations({ status, page = 1, limit = 50 }) {
      LEFT JOIN LATERAL (
        SELECT COUNT(*)::int AS unread_count
        FROM conversation_messages cm
-       WHERE cm.conversation_id = c.id AND cm.read_at IS NULL AND cm.sender_id != c.assigned_pharmacist_id
+       WHERE cm.conversation_id = c.id
+         AND cm.read_at IS NULL
+         AND cm.sender_role = 'PATIENT'
+         AND cm.is_private_note = false
      ) uc ON true
      WHERE ${where}
      ORDER BY c.priority DESC, COALESCE(lm.last_message_at, c.updated_at) DESC
@@ -190,18 +196,27 @@ export async function listOpenConversations({ status, page = 1, limit = 50 }) {
   };
 }
 
-export async function getUnreadCount(pharmacistId) {
+export async function getUnreadCount(_pharmacistId) {
   const result = await queryOne(
     `SELECT COUNT(*) as count
      FROM conversation_messages cm
      JOIN conversations c ON c.id = cm.conversation_id
-     WHERE c.assigned_pharmacist_id = $1
+     WHERE c.status <> 'CLOSED'
        AND cm.read_at IS NULL
-       AND cm.sender_id != $1
+       AND cm.sender_role = 'PATIENT'
        AND cm.is_private_note = false`,
-    [pharmacistId]
+    []
   );
   return parseInt(result?.count || 0, 10);
+}
+
+export async function listStaffRecipients() {
+  return query(
+    `SELECT DISTINCT u.id
+     FROM users u
+     WHERE u.is_active = true
+       AND u.role IN ('PHARMACIST', 'ADMIN', 'MANAGER')`
+  );
 }
 
 export async function updateConversationStatus(id, status, actorId) {

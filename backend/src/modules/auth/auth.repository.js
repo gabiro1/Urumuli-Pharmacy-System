@@ -2,6 +2,7 @@ import { query, queryOne, transaction } from '../../config/database.js';
 
 const userFields = `
   id, email, password_hash, first_name, last_name, phone,
+  avatar,
   role, is_active, email_verified_at, last_login_at,
   password_changed_at, two_factor_enabled, two_factor_secret, two_factor_backup_codes,
   created_at, updated_at
@@ -57,7 +58,7 @@ export async function createIdentityForUser(userId, phone, fullName, email) {
 
 export async function getPatientProfile(userId) {
   return queryOne(
-    `SELECT pp.*, u.email, u.first_name, u.last_name, u.phone, u.created_at
+    `SELECT pp.*, u.email, u.first_name, u.last_name, u.phone, u.avatar, u.created_at
      FROM patient_profiles pp
      JOIN users u ON u.id = pp.user_id
      WHERE pp.user_id = $1`,
@@ -86,12 +87,22 @@ export async function updatePatientProfile(userId, data) {
     await updateTable('users', 'id', userColumns);
     await updateTable('patient_profiles', 'user_id', profileColumns);
     const result = await client.query(
-      `SELECT pp.*, u.email, u.first_name, u.last_name, u.phone, u.created_at
+      `SELECT pp.*, u.email, u.first_name, u.last_name, u.phone, u.avatar, u.created_at
        FROM patient_profiles pp JOIN users u ON u.id = pp.user_id WHERE pp.user_id = $1`,
       [userId]
     );
     return result.rows[0] || null;
   });
+}
+
+export async function updatePatientAvatar(userId, avatar) {
+  return queryOne(
+    `UPDATE users
+     SET avatar = $1, updated_at = NOW()
+     WHERE id = $2
+     RETURNING id`,
+    [avatar, userId]
+  );
 }
 
 export async function getPatientSettings(userId) {
@@ -477,4 +488,106 @@ export async function markEmailVerified(userId) {
      RETURNING ${userFields}`,
     [userId]
   );
+}
+
+// ---------------------------------------------------------------------------
+// Data protection: portable export and right-to-erasure (anonymization).
+// Patient clinical rows are intentionally kept for pharmacy/regulatory record
+// keeping, but every personally identifying field is stripped or replaced.
+// ---------------------------------------------------------------------------
+
+const exportQueries = (userId) => ({
+  identity: `SELECT id, full_name, verified_phone, email, verification_status, profile_completion_status, notification_preferences, verified_at, created_at FROM patient_identities WHERE user_id=$1`,
+  profile: `SELECT date_of_birth, gender, address, city, emergency_contact_name, emergency_contact_phone, blood_group, weight_kg, height_cm, allergies_notes, chronic_conditions, insurance_provider, insurance_number, preferred_pharmacy_notes, created_at FROM patient_profiles WHERE user_id=$1`,
+  settings: `SELECT prescription_updates, message_alerts, appointment_reminders, marketing_emails, share_read_receipts, compact_view FROM patient_settings WHERE user_id=$1`,
+  cart: `SELECT id, medicine_id, quantity, usage_notes, created_at FROM carts WHERE user_id=$1 ORDER BY created_at`,
+  consents: `SELECT consent_type, granted, granted_at FROM patient_consents WHERE patient_id=$1 ORDER BY consent_type`,
+  orders: `SELECT o.id, o.public_reference, o.status, o.order_type, o.subtotal, o.delivery_fee, o.discount_amount, o.total, o.currency, o.fulfilment_method, o.delivery_address, o.payment_method, o.payment_status, o.created_at,
+             COALESCE(jsonb_agg(jsonb_build_object('medicine', oi.medicine_snapshot->'name', 'requested_quantity', oi.requested_quantity, 'unit_price', oi.unit_price, 'total', oi.total) ORDER BY oi.created_at) FILTER (WHERE oi.id IS NOT NULL), '[]') AS items
+          FROM orders o JOIN patient_identities pi ON pi.id=o.patient_identity_id
+          LEFT JOIN order_items oi ON oi.order_id=o.id
+          WHERE pi.user_id=$1 GROUP BY o.id ORDER BY o.created_at DESC`,
+  prescriptions: `SELECT p.id, p.status, p.patient_name, p.doctor_name, p.validity_status, p.created_at,
+                     COALESCE(jsonb_agg(jsonb_build_object('mime_type', pf.mime_type, 'byte_size', pf.byte_size, 'created_at', pf.created_at) ORDER BY pf.created_at) FILTER (WHERE pf.id IS NOT NULL), '[]') AS files
+                  FROM prescriptions p LEFT JOIN prescription_files pf ON pf.prescription_id=p.id
+                  WHERE p.patient_id=$1 GROUP BY p.id ORDER BY p.created_at DESC`,
+  paymentAttempts: `SELECT pa.provider, pa.provider_reference, pa.amount, pa.currency, pa.status, pa.created_at FROM orders o JOIN patient_identities pi ON pi.id=o.patient_identity_id JOIN payment_attempts pa ON pa.order_id=o.id WHERE pi.user_id=$1 ORDER BY pa.created_at DESC`,
+  medicationHistory: `SELECT pmh.medicine_name, pmh.dosage, pmh.frequency, pmh.duration, pmh.start_date, pmh.end_date, pmh.status, pmh.notes FROM patient_medication_history pmh WHERE pmh.patient_id=$1 ORDER BY pmh.created_at DESC`,
+  adherence: `SELECT pa.medicine_name, pa.scheduled_date, pa.scheduled_time, pa.taken, pa.taken_at, pa.notes FROM patient_adherence pa WHERE pa.patient_id=$1 ORDER BY pa.scheduled_date DESC`,
+  refills: `SELECT rr.medicine_name, rr.next_refill_date, rr.status, rr.created_at FROM refill_reminders rr WHERE rr.patient_id=$1 ORDER BY rr.created_at DESC`,
+  conversations: `SELECT c.id, c.status, c.context_type, c.subject, c.created_at, c.closed_at,
+                     COALESCE(jsonb_agg(jsonb_build_object('body', cm.body, 'created_at', cm.created_at) ORDER BY cm.created_at) FILTER (WHERE cm.id IS NOT NULL), '[]') AS messages
+                  FROM conversations c LEFT JOIN conversation_messages cm ON cm.conversation_id=c.id
+                  WHERE c.patient_id=$1 GROUP BY c.id ORDER BY c.created_at DESC`,
+  telehealth: `SELECT ts.status, ts.room_id, ts.scheduled_at, ts.notes, ts.created_at FROM telehealth_sessions ts WHERE ts.patient_id=$1 ORDER BY ts.created_at DESC`,
+  availability: `SELECT r.medicine_name, r.verification_status, r.searched_term, r.physical_stock_confirmed, r.verified_at, r.created_at FROM medicine_availability_requests r WHERE r.patient_id=$1 ORDER BY r.created_at DESC`,
+  feedback: `SELECT pf.feedback_type, pf.rating, pf.comment, pf.created_at FROM patient_feedback pf WHERE pf.patient_id=$1 ORDER BY pf.created_at DESC`,
+  insurance: `SELECT ic.status, ic.claim_number, ic.policy_number, ic.total_amount, ic.covered_amount, ic.patient_responsibility, ic.submitted_at FROM insurance_claims ic WHERE ic.patient_id=$1 ORDER BY ic.submitted_at DESC NULLS LAST`,
+});
+
+export async function collectPatientData(userId) {
+  const result = {};
+  for (const [key, sql] of Object.entries(exportQueries(userId))) {
+    if (key === 'orders' || key === 'prescriptions' || key === 'conversations') {
+      result[key] = (await query(sql, [userId])).rows;
+    } else {
+      const { rows } = await query(sql, [userId]);
+      result[key] = rows;
+    }
+  }
+  return result;
+}
+
+export async function anonymizePatientAccount(userId) {
+  return transaction(async (client) => {
+    const user = (
+      await client.query('SELECT id FROM users WHERE id=$1', [userId])
+    ).rows[0];
+    if (!user) return null;
+
+    const anonEmail = `deleted-${user.id}@anonymous.urumuli.rw`;
+    const anonPhone = `+699${user.id.replace(/-/g, '').slice(0, 9)}`;
+
+    await client.query(
+      `UPDATE users
+       SET email=$2, first_name='Deleted', last_name='User', phone=NULL, avatar=NULL,
+           is_active=false, email_verified_at=NULL, refresh_token_hash=NULL,
+           password_reset_token_hash=NULL, password_reset_expires_at=NULL,
+           email_verification_token_hash=NULL, email_verification_expires_at=NULL,
+           auth_provider_id=NULL, two_factor_secret=NULL, two_factor_backup_codes=NULL
+       WHERE id=$1`,
+      [userId, anonEmail]
+    );
+    await client.query(
+      `UPDATE patient_identities
+       SET full_name='Deleted User', email=NULL, verified_phone=$2, verification_status='ANONYMIZED',
+           profile_completion_status='ANONYMIZED', notification_preferences='{}'::jsonb
+       WHERE user_id=$1`,
+      [userId, anonPhone]
+    );
+    await client.query(
+      `UPDATE patient_profiles
+       SET date_of_birth=NULL, address=NULL, city=NULL, emergency_contact_name=NULL, emergency_contact_phone=NULL,
+           blood_group=NULL, weight_kg=NULL, height_cm=NULL, allergies_notes=NULL, chronic_conditions=NULL,
+           insurance_provider=NULL, insurance_number=NULL, preferred_pharmacy_notes=NULL
+       WHERE user_id=$1`,
+      [userId]
+    );
+    await client.query(`DELETE FROM carts WHERE user_id=$1`, [userId]);
+    await client.query(`DELETE FROM notifications WHERE user_id=$1`, [userId]);
+    await client.query(
+      `DELETE FROM conversation_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE patient_id=$1)`,
+      [userId]
+    );
+    await client.query(`DELETE FROM conversations WHERE patient_id=$1`, [userId]);
+    await client.query(
+      `UPDATE prescriptions SET patient_name='Deleted User', patient_phone=NULL, doctor_name='Deleted', unverified_ocr_data=NULL WHERE patient_id=$1`,
+      [userId]
+    );
+    await client.query(
+      `UPDATE patient_settings SET prescription_updates=COALESCE(prescription_updates,'{}'), message_alerts=COALESCE(message_alerts,'{}'), marketing_emails=false WHERE user_id=$1`,
+      [userId]
+    );
+    return { id: user.id };
+  });
 }

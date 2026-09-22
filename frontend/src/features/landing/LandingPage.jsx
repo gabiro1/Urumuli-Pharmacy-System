@@ -4,7 +4,6 @@ import {
   motion,
 } from 'framer-motion'
 import {
-  FileText,
   MessageSquare,
   Shield,
   Clock,
@@ -12,22 +11,17 @@ import {
   CheckCircle2,
   Users,
   Pill,
-  Search,
   Activity,
   Layers,
   Bell,
   Heart,
   HeartPulse,
-  Star,
   Upload,
-  Zap,
   Building2,
   ShieldCheck,
   ClipboardCheck,
   Package,
   ShoppingCart,
-  BarChart3,
-  PlayCircle,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -36,15 +30,6 @@ import BackgroundBeams from '@/components/magicui/background-beams'
 import PublicNavbar from '@/components/shared/PublicNavbar'
 import HeroSection from '@/components/ui/hero-section-9'
 import InteractiveMedicineCard from '@/components/ui/interactive-medicine-card'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
-
-const DEMO_VIDEO_URL = 'https://videos.pexels.com/video-files/13367423/13367423-sd_640_360_30fps.mp4'
 
 function TiltCard({ children, className }) {
   const cardRef = useRef(null)
@@ -174,7 +159,6 @@ export default function LandingPage() {
   const navigate = useNavigate()
   const [featuredMedicines, setFeaturedMedicines] = useState([])
   const [medicinesLoading, setMedicinesLoading] = useState(true)
-  const [demoOpen, setDemoOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -193,99 +177,63 @@ export default function LandingPage() {
 
   const features = [
     {
-      icon: FileText,
-      title: 'Prescription Workflow',
+      icon: Pill,
+      title: 'Find your medicine',
       description:
-        'Process prescriptions digitally from patient submission through pharmacist review, approval, and fulfillment.',
-    },
-    {
-      icon: Package,
-      title: 'Inventory Management',
-      description:
-        'Track medicines, stock levels, pricing, and availability from one organized pharmacy dashboard.',
-    },
-    {
-      icon: ShoppingCart,
-      title: 'Sales & Orders',
-      description:
-        'Manage medicine requests, complete sales, and keep stock records accurate as orders are fulfilled.',
+        'Browse medicines, prices, dosage forms, and prescription requirements before you visit the pharmacy.',
     },
     {
       icon: MessageSquare,
-      title: 'Secure Messaging',
+      title: 'Ask a pharmacist',
       description:
-        'Encrypted real-time chat between patients and pharmacists for prescription inquiries, refills, and consultations.',
+        'Send a question to the Urumuli pharmacy team and continue the conversation in one secure place.',
     },
     {
-      icon: Shield,
-      title: 'Drug Safety Checks',
+      icon: Upload,
+      title: 'Send your prescription',
       description:
-        'Built-in interaction checker cross-references medications against known drug-drug and drug-allergy interactions.',
+        'Upload a clear photo or PDF and receive updates as the pharmacy team reviews it.',
     },
     {
       icon: Clock,
-      title: 'Status Tracking',
+      title: 'Know what is happening',
       description:
-        'Patients track their prescriptions in real time — from PENDING to UNDER_REVIEW, APPROVED, and COMPLETED.',
+        'See clear updates when your request is received, reviewed, approved, or ready.',
     },
     {
-      icon: Bell,
-      title: 'Notifications',
+      icon: ShieldCheck,
+      title: 'Make safer choices',
       description:
-        'Automatic alerts when prescriptions are reviewed, approved, or when pharmacists send new messages.',
+        'Get helpful checks and pharmacist guidance around interactions, allergies, and how to use your medicine.',
     },
     {
-      icon: Pill,
-      title: 'Medicine Catalog',
+      icon: ShoppingCart,
+      title: 'Order with confidence',
       description:
-        'Comprehensive read-only medicine database with details on usage, dosage, side effects, and contraindications.',
-    },
-    {
-      icon: Search,
-      title: 'Audit Trail',
-      description:
-        'Immutable, tamper-proof audit logs tracking operational activity for accountability and compliance.',
-    },
-    {
-      icon: Users,
-      title: 'Patient Portal',
-      description:
-        'Dedicated patient interface to submit prescriptions, track status, view history, and communicate with pharmacists.',
-    },
-    {
-      icon: Shield,
-      title: 'Secure & Compliant',
-      description:
-        'Role-based access, encrypted data, and complete audit trails protect your pharmacy operations.',
-    },
-    {
-      icon: BarChart3,
-      title: 'Analytics & Reporting',
-      description:
-        'Turn day-to-day pharmacy data into practical insight on inventory, sales, prescriptions, and performance.',
+        'Confirm your quantity, choose the available payment and pickup option, and follow your order.',
     },
   ]
 
   const benefits = [
     {
-      icon: Zap,
-      title: 'Faster Prescriptions',
-      description: 'Patients get their medications faster with digital submission and real-time pharmacist review — no more waiting on phone calls or paper forms.',
+      icon: Heart,
+      title: 'Care in one simple account',
+      description: 'Keep your messages, prescriptions, and orders together so you do not have to repeat yourself.',
     },
     {
       icon: Shield,
-      title: 'Fewer Medication Errors',
-      description: 'Built-in drug interaction checks and allergy alerts catch potential issues before they reach the patient.',
+      title: 'More confidence before you order',
+      description: 'See medicine details and get professional guidance before you make a decision.',
     },
     {
       icon: Heart,
-      title: 'Better Patient Experience',
-      description: 'Patients can track their prescriptions, message their pharmacist, and get updates — all from their phone.',
+      title: 'A pharmacist when you need one',
+      description: 'Ask about a medicine, availability, quantity, or next step and hear back from Urumuli.',
     },
     {
-      icon: Star,
-      title: 'Streamlined Pharmacy Operations',
-      description: 'Pharmacists manage everything from a single dashboard: review prescriptions, chat with patients, and maintain compliance records.',
+      icon: Bell,
+      title: 'Updates without the chasing',
+      description: 'Receive clear messages and status updates instead of calling repeatedly to ask what is happening.',
     },
   ]
 
@@ -313,50 +261,50 @@ export default function LandingPage() {
           <>
             {' '}
             <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              Pharmacy
+              Pharmacy care
             </span>
             <br />
-            Management System
+            made simpler for you
           </>
         }
-        subtitle="Urumuli connects patients and pharmacists — digital prescriptions, inventory and sales, secure messaging, and real-time status tracking in a single streamlined platform."
+        subtitle="Find medicines, ask a pharmacist, send prescriptions, and follow your order from one simple patient account."
         actions={[
           {
             text: (
               <>
-                Sign In
+                Browse medicines
                 <ArrowRight className="ml-2 h-4 w-4" />
               </>
             ),
-            onClick: () => navigate('/login'),
+            onClick: () => navigate('/medicines'),
             variant: 'default',
           },
           {
             text: (
               <>
-                Watch demo
-                <PlayCircle className="ml-2 h-4 w-4" />
+                Create patient account
+                <Users className="ml-2 h-4 w-4" />
               </>
             ),
-            onClick: () => setDemoOpen(true),
+            onClick: () => navigate('/patient/register'),
             variant: 'outline',
           },
         ]}
         stats={[
           {
-            value: '800+',
-            label: 'Active pharmacies',
-            icon: <Building2 className="h-5 w-5 text-muted-foreground" />,
-          },
-          {
-            value: '99%',
-            label: 'Uptime SLA',
-            icon: <ShieldCheck className="h-5 w-5 text-muted-foreground" />,
-          },
-          {
-            value: '4.8',
-            label: 'Rated by users',
+            value: 'One account',
+            label: 'Messages, prescriptions & orders',
             icon: <HeartPulse className="h-5 w-5 text-muted-foreground" />,
+          },
+          {
+            value: 'Real support',
+            label: 'From Urumuli pharmacists',
+            icon: <MessageSquare className="h-5 w-5 text-muted-foreground" />,
+          },
+          {
+            value: 'Clear updates',
+            label: 'From request to pickup',
+            icon: <CheckCircle2 className="h-5 w-5 text-muted-foreground" />,
           },
         ]}
         images={[
@@ -365,27 +313,6 @@ export default function LandingPage() {
           'https://images.unsplash.com/photo-1576602976047-174e57a47881?w=800&h=800&fit=crop&q=80',
         ]}
       />
-
-      {/* ========== DEMO VIDEO MODAL ========== */}
-      <Dialog open={demoOpen} onOpenChange={setDemoOpen}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Urumuli demo</DialogTitle>
-            <DialogDescription>Watch how Urumuli streamlines pharmacy operations.</DialogDescription>
-          </DialogHeader>
-          <div className="aspect-video w-full bg-black">
-            <video
-              key={demoOpen}
-              src={DEMO_VIDEO_URL}
-              className="h-full w-full"
-              controls
-              autoPlay={demoOpen}
-              playsInline
-              poster="https://images.unsplash.com/photo-1576091160550-112173f31c77?w=1280&h=720&fit=crop&q=80"
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* ========== FEATURED MEDICINES ========== */}
       <section className="section-shell-tight relative border-y border-border/50">
@@ -398,10 +325,10 @@ export default function LandingPage() {
             className="text-center mb-12"
           >
             <h2 className="text-3xl lg:text-4xl font-bold tracking-tight">
-              Medicines We Provide
+              Find what you need
             </h2>
             <p className="mt-3 text-muted-foreground text-lg">
-              Browse available medicines, pricing, prescription requirements, and product details.
+              Search the catalogue for medicine details, availability, pricing, and prescription requirements.
             </p>
           </motion.div>
 
@@ -449,17 +376,17 @@ export default function LandingPage() {
           >
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 dark:bg-white/10 text-primary dark:text-foreground text-xs font-medium uppercase tracking-wider mb-4">
               <Layers className="w-3 h-3" />
-              Platform Features
+              For patients
             </div>
             <h2 className="text-3xl lg:text-4xl font-bold tracking-tight">
-              Everything You Need for{' '}
+              Everything you need for{' '}
               <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Pharmacy Operations
+                your next pharmacy step
               </span>
             </h2>
             <p className="mt-3 text-muted-foreground text-lg max-w-2xl mx-auto">
-              From inventory and sales to pharmacist review and secure
-              communication — every tool built for modern healthcare.
+              From finding a medicine to getting pharmacist guidance and following your order,
+              Urumuli keeps your next step clear.
             </p>
           </motion.div>
 
@@ -483,16 +410,16 @@ export default function LandingPage() {
           >
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 dark:bg-white/10 text-primary dark:text-foreground text-xs font-medium uppercase tracking-wider mb-4">
               <Activity className="w-3 h-3" />
-              How It Works
+              Your next step
             </div>
             <h2 className="text-3xl lg:text-4xl font-bold tracking-tight">
-              A Simple, Secure{' '}
+              From question to medicine,{' '}
               <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Workflow
+                made simple
               </span>
             </h2>
             <p className="mt-3 text-muted-foreground text-lg max-w-2xl mx-auto">
-              From stock setup to fulfillment, every pharmacy action moves through a transparent, audited process.
+              Start with a search or a question, get clear pharmacist guidance, and keep your order updates in one place.
             </p>
           </motion.div>
 
@@ -504,24 +431,24 @@ export default function LandingPage() {
             {[
               {
                 number: '01',
-                icon: Package,
-                title: 'Manage Your Pharmacy',
+                icon: Pill,
+                title: 'Find or ask',
                 description:
-                  'Patients upload a photo of their prescription or request a refill through the patient portal in under a minute.',
+                  'Search the catalogue or tell a Urumuli pharmacist what you need.',
               },
               {
                 number: '02',
                 icon: ClipboardCheck,
-                title: 'Process Requests Safely',
+                title: 'Get clear guidance',
                 description:
-                  'A pharmacist reviews the prescription, runs built-in drug interaction and allergy checks, then approves or rejects it.',
+                  'Upload a prescription when needed and receive a clear reply from the pharmacy team.',
               },
               {
                 number: '03',
-                icon: MessageSquare,
-                title: 'Fulfill, Track & Communicate',
+                icon: Package,
+                title: 'Order and follow along',
                 description:
-                  'Patients follow real-time status updates and securely message their pharmacist for questions, refills, and follow-ups.',
+                  'Confirm your quantity, pay or choose pickup when ready, and keep every update in your account.',
               },
             ].map((step, i) => (
               <motion.div
@@ -560,7 +487,7 @@ export default function LandingPage() {
             className="mt-14 flex flex-col items-center gap-4"
           >
             <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-3">
-              {['Inventory', 'Sales & Orders', 'Prescriptions', 'Patient Care'].map((status, i, arr) => (
+              {['Find', 'Ask', 'Review', 'Order'].map((status, i, arr) => (
                 <div key={status} className="flex items-center gap-3">
                   <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full border border-border/50 bg-card/50 backdrop-blur-sm text-sm font-medium">
                     <span className="w-5 h-5 rounded-full bg-primary/10 dark:bg-white/10 text-[10px] font-bold text-primary dark:text-foreground flex items-center justify-center">
@@ -575,7 +502,7 @@ export default function LandingPage() {
               ))}
             </div>
             <p className="text-sm text-muted-foreground text-center max-w-xl">
-              Every action is recorded in an immutable audit trail, keeping the entire process transparent and compliant.
+              Your messages, prescription updates, and order details stay together in your account.
             </p>
           </motion.div>
         </div>
@@ -593,17 +520,17 @@ export default function LandingPage() {
           >
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 dark:bg-white/10 text-primary dark:text-foreground text-xs font-medium uppercase tracking-wider mb-4">
               <Heart className="w-3 h-3" />
-              Why Choose Urumuli
+              Made for your peace of mind
             </div>
             <h2 className="text-3xl lg:text-4xl font-bold tracking-tight">
-              Better Care for Patients.{' '}
+              Pharmacy support that{' '}
               <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Smarter Workflows for Pharmacists.
+                stays with you
               </span>
             </h2>
             <p className="mt-3 text-muted-foreground text-lg max-w-2xl mx-auto">
-              Urumuli brings patients and pharmacists together on one platform — making
-              prescription management faster, safer, and more convenient for everyone.
+              Urumuli is built for patients and families who want clear answers and an easier way
+              to get medicine support without unnecessary trips or phone calls.
             </p>
           </motion.div>
 
@@ -641,17 +568,17 @@ export default function LandingPage() {
             <div className="inline-flex flex-col sm:flex-row items-center gap-4 sm:gap-6 p-4 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50">
               <div className="flex items-center gap-2 text-sm">
                 <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-                <span className="text-muted-foreground">No more paper prescriptions</span>
+                <span className="text-muted-foreground">Simple medicine search</span>
               </div>
               <div className="hidden sm:block w-px h-6 bg-border" />
               <div className="flex items-center gap-2 text-sm">
                 <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-                <span className="text-muted-foreground">Real-time status updates</span>
+                <span className="text-muted-foreground">Clear status updates</span>
               </div>
               <div className="hidden sm:block w-px h-6 bg-border" />
               <div className="flex items-center gap-2 text-sm">
                 <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-                <span className="text-muted-foreground">Secure patient communication</span>
+                <span className="text-muted-foreground">Pharmacist support</span>
               </div>
             </div>
           </motion.div>
@@ -669,14 +596,14 @@ export default function LandingPage() {
             transition={{ duration: 0.6 }}
           >
             <h2 className="text-3xl lg:text-5xl font-bold tracking-tight leading-tight">
-              Ready to Streamline{' '}
+              Ready to make your next pharmacy visit{' '}
               <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Your Pharmacy Operations?
+                easier?
               </span>
             </h2>
             <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">
-              Patients can request medicines and chat with their pharmacist.
-              Staff can manage inventory, sales, prescriptions, and workflows.
+              Create a free patient account to browse medicines, upload a prescription,
+              ask a pharmacist, and keep every update together.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button
@@ -684,21 +611,21 @@ export default function LandingPage() {
                 onClick={() => navigate('/patient/register')}
                 className="h-12 px-10 text-base font-medium gap-2 group"
               >
-                Create Account
+                Create patient account
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </Button>
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/medicines')}
                 className="h-12 px-10 text-base font-medium"
               >
-                Sign In
+                Browse medicines
               </Button>
             </div>
             <p className="mt-6 text-sm text-muted-foreground">
               <CheckCircle2 className="inline w-4 h-4 mr-1 text-green-500" />
-              Secure &bull; HIPAA-compliant &bull; Built for modern healthcare
+              Private conversations &bull; Clear updates &bull; Urumuli pharmacist support
             </p>
           </motion.div>
         </div>
@@ -716,8 +643,8 @@ export default function LandingPage() {
                 <span className="text-lg font-bold">Urumuli</span>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-                A complete pharmacy operations platform for inventory, sales,
-                prescriptions, and patient communication.
+                A simple way to find medicines, ask a pharmacist, and keep
+                every prescription and order update in one place.
               </p>
             </div>
             <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-8">
@@ -726,6 +653,7 @@ export default function LandingPage() {
                 <ul className="space-y-2">
                   {[
                     { label: 'Home', path: '/' },
+                    { label: 'Medicines', path: '/medicines' },
                     { label: 'Services', path: '/services' },
                     { label: 'About Us', path: '/about' },
                     { label: 'Contact', path: '/contact' },
@@ -744,7 +672,6 @@ export default function LandingPage() {
                   {[
                     { label: 'Sign In', path: '/login' },
                     { label: 'Patient Registration', path: '/patient/register' },
-                    { label: 'Staff Registration', path: '/register' },
                   ].map((item) => (
                     <li key={item.label}>
                       <button onClick={() => navigate(item.path)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -755,12 +682,17 @@ export default function LandingPage() {
                 </ul>
               </div>
               <div className="space-y-3">
-                <h4 className="text-sm font-semibold">Support</h4>
+                <h4 className="text-sm font-semibold">Patient help</h4>
                 <ul className="space-y-2">
-                  {['Help Center', 'FAQ', 'Privacy Policy', 'Terms of Service'].map((item) => (
-                    <li key={item}>
-                      <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                        {item}
+                  {[
+                    { label: 'How it works', path: '#tour' },
+                    { label: 'Find a medicine', path: '/medicines' },
+                    { label: 'Contact us', path: '/contact' },
+                    { label: 'Sign in', path: '/login' },
+                  ].map((item) => (
+                    <li key={item.label}>
+                      <button onClick={() => item.path.startsWith('#') ? document.getElementById(item.path.slice(1))?.scrollIntoView({ behavior: 'smooth' }) : navigate(item.path)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                        {item.label}
                       </button>
                     </li>
                   ))}

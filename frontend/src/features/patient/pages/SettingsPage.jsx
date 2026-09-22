@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Bell, Shield, Lock, Save, RotateCcw, User, Loader2 } from 'lucide-react'
@@ -12,6 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePatientAuthStore } from '@/stores/patientAuthStore'
+import { PatientPageHeader, PatientPageShell } from '../components/PatientPageShell'
 
 const defaultSettings = {
   prescriptionUpdates: true,
@@ -52,7 +52,7 @@ function ToggleRow({ title, description, checked, onChange }) {
 
 function SettingsSkeleton() {
   return (
-    <div className="space-y-6 p-6 max-w-4xl">
+    <PatientPageShell className="max-w-5xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
           <Skeleton className="h-8 w-40" />
@@ -64,7 +64,7 @@ function SettingsSkeleton() {
         </div>
       </div>
 
-      <Card>
+      <Card className="rounded-2xl border-border/70 shadow-sm">
         <CardContent className="p-6">
           <div className="flex items-center gap-4">
             <Skeleton className="h-14 w-14 rounded-full" />
@@ -76,8 +76,8 @@ function SettingsSkeleton() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Card className="rounded-2xl border-border/70 shadow-sm">
           <CardHeader>
             <Skeleton className="h-5 w-32" />
           </CardHeader>
@@ -88,7 +88,7 @@ function SettingsSkeleton() {
             <Skeleton className="h-16 w-full rounded-xl" />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-border/70 shadow-sm">
           <CardHeader>
             <Skeleton className="h-5 w-36" />
           </CardHeader>
@@ -99,7 +99,7 @@ function SettingsSkeleton() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PatientPageShell>
   )
 }
 
@@ -165,7 +165,7 @@ export default function SettingsPage() {
 
   if (isError) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-6">
+      <PatientPageShell className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
         <div className="p-4 rounded-full bg-destructive/10">
           <Shield className="h-8 w-8 text-destructive" />
         </div>
@@ -177,24 +177,18 @@ export default function SettingsPage() {
           <RotateCcw className="mr-2 h-4 w-4" />
           Retry
         </Button>
-      </div>
+      </PatientPageShell>
     )
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6 p-6 max-w-4xl"
-    >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground">
-            Control how the patient portal behaves for this browser.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <PatientPageShell className="max-w-5xl">
+      <PatientPageHeader
+        eyebrow="Your preferences"
+        title="Settings"
+        description="Choose how you receive updates and how the patient portal feels on this device."
+        action={(
+          <div className="flex items-center gap-2">
           <Button variant="outline" onClick={handleReset} disabled={saveMutation.isPending}>
             <RotateCcw className="mr-2 h-4 w-4" />
             Reset
@@ -212,10 +206,11 @@ export default function SettingsPage() {
               </>
             )}
           </Button>
-        </div>
-      </div>
+          </div>
+        )}
+      />
 
-      <Card>
+      <Card className="rounded-2xl border-border/70 shadow-sm">
         <CardContent className="p-6">
           <div className="flex items-center gap-4">
             <Avatar className="h-14 w-14">
@@ -238,8 +233,8 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Card className="rounded-2xl border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Bell className="h-4 w-4 text-muted-foreground" />
@@ -274,7 +269,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Shield className="h-4 w-4 text-muted-foreground" />
@@ -320,6 +315,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
-    </motion.div>
+    </PatientPageShell>
   )
 }

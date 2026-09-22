@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/shared/Logo'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -11,8 +12,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Menu, X, User, LayoutDashboard, Package, Settings2, LogOut } from 'lucide-react'
+import { Menu, X, User, MessageSquare, FileText, Package, Settings2, LogOut } from 'lucide-react'
 import { usePatientAuthStore } from '@/stores/patientAuthStore'
+import { getMediaUrl } from '@/lib/media'
 
 function ThemeToggle() {
   const [theme, setTheme] = useState(() => {
@@ -72,7 +74,7 @@ const navItems = [
   { label: 'Contact', path: '/contact' },
 ]
 
-function PublicNavbar() {
+function PublicNavbar({ alwaysSolid = false }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [scrolled, setScrolled] = useState(false)
@@ -127,7 +129,7 @@ function PublicNavbar() {
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled || mobileOpen
+        alwaysSolid || scrolled || mobileOpen
           ? 'bg-background/80 backdrop-blur-xl border-b border-border'
           : 'bg-transparent'
       }`}
@@ -152,9 +154,14 @@ function PublicNavbar() {
                 <DropdownMenuTrigger asChild>
                   <button
                     aria-label="Open account menu"
-                    className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-primary/10 text-sm font-bold text-foreground transition-colors hover:bg-primary/20"
+                    className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm font-bold text-foreground transition-colors hover:opacity-90"
                   >
-                    {initials}
+                    <Avatar className="h-9 w-9 border border-border bg-primary/10">
+                      <AvatarImage src={getMediaUrl(user?.avatar)} alt={fullName || 'Patient'} />
+                      <AvatarFallback className="bg-primary/10 text-sm font-bold text-foreground">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-60">
@@ -169,11 +176,14 @@ function PublicNavbar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate('/patient')}>
-                    <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate('/patient/orders')}>
                     <Package className="mr-2 h-4 w-4" /> My orders
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/patient/messages')}>
+                    <MessageSquare className="mr-2 h-4 w-4" /> Messages
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/patient/prescriptions')}>
+                    <FileText className="mr-2 h-4 w-4" /> Prescriptions
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate('/patient/profile')}>
                     <User className="mr-2 h-4 w-4" /> Profile
@@ -241,8 +251,8 @@ function PublicNavbar() {
               <div className="pt-3 sm:hidden">
                 {isAuthenticated ? (
                   <div className="space-y-2">
-                    <Button className="w-full" onClick={() => navigate('/patient')}>
-                      <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
+                    <Button className="w-full" onClick={() => navigate('/patient/profile')}>
+                      <User className="mr-2 h-4 w-4" /> Open profile
                     </Button>
                     <Button variant="outline" className="w-full" onClick={handleLogout}>
                       <LogOut className="mr-2 h-4 w-4" /> Sign out

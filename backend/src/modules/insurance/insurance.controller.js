@@ -14,10 +14,16 @@ export async function updateProvider(req, res, next) {
   try { return sendSuccess(res, await service.updateProvider(req.params.id, req.body)); } catch (e) { next(e); }
 }
 export async function listClaims(req, res, next) {
-  try { const r = await service.listClaims({ ...req.query, patientId: req.query.patientId || req.user.userId }); return sendPaginated(res, r.data, r.meta); } catch (e) { next(e); }
+  try {
+    const r = await service.listClaims(
+      { ...req.query, patientId: req.query.patientId || req.user.userId },
+      req.user
+    );
+    return sendPaginated(res, r.data, r.meta);
+  } catch (e) { next(e); }
 }
 export async function getClaim(req, res, next) {
-  try { return sendSuccess(res, await service.getClaim(req.params.id)); } catch (e) { next(e); }
+  try { return sendSuccess(res, await service.getClaim(req.params.id, req.user)); } catch (e) { next(e); }
 }
 export async function createClaim(req, res, next) {
   try { return sendCreated(res, await service.createClaim({ ...req.body, patientId: req.user.userId })); } catch (e) { next(e); }

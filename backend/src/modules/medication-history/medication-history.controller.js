@@ -4,14 +4,14 @@ import { sendSuccess, sendCreated, sendPaginated } from '../../utils/response.js
 export async function listHistory(req, res, next) {
   try {
     const patientId = req.params.patientId || req.user.userId;
-    const result = await service.listHistory(patientId, req.query);
+    const result = await service.listHistory(patientId, req.query, req.user);
     return sendPaginated(res, result.data, result.meta);
   } catch (error) { next(error); }
 }
 
 export async function getEntry(req, res, next) {
   try {
-    const entry = await service.getEntry(req.params.id);
+    const entry = await service.getEntry(req.params.id, req.user);
     return sendSuccess(res, entry);
   } catch (error) { next(error); }
 }
@@ -33,7 +33,7 @@ export async function updateEntry(req, res, next) {
 export async function getActiveMeds(req, res, next) {
   try {
     const patientId = req.params.patientId || req.user.userId;
-    const meds = await service.getActiveMedications(patientId);
+    const meds = await service.getActiveMedications(patientId, req.user);
     return sendSuccess(res, meds);
   } catch (error) { next(error); }
 }
@@ -41,7 +41,7 @@ export async function getActiveMeds(req, res, next) {
 export async function getTimeline(req, res, next) {
   try {
     const patientId = req.params.patientId || req.user.userId;
-    const timeline = await service.getTimeline(patientId);
+    const timeline = await service.getTimeline(patientId, req.user);
     return sendSuccess(res, timeline);
   } catch (error) { next(error); }
 }

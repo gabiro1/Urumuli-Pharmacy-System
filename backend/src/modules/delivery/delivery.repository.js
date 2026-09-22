@@ -2,7 +2,11 @@ import { query, queryOne } from '../../config/database.js';
 
 export async function getByOrderId(orderId) {
   return queryOne(
-    `SELECT dt.* FROM delivery_tracking dt WHERE dt.order_id = $1 ORDER BY dt.created_at DESC LIMIT 1`,
+    `SELECT dt.*, pi.user_id AS patient_user_id
+     FROM delivery_tracking dt
+     JOIN orders o ON o.id = dt.order_id
+     LEFT JOIN patient_identities pi ON pi.id = o.patient_identity_id
+     WHERE dt.order_id = $1 ORDER BY dt.created_at DESC LIMIT 1`,
     [orderId]
   );
 }
@@ -71,9 +75,10 @@ export async function updateStatus(id, status, extra = {}) {
 
 export async function getById(id) {
   return queryOne(
-    `SELECT dt.*, o.id AS order_display_id
+    `SELECT dt.*, o.id AS order_display_id, pi.user_id AS patient_user_id
      FROM delivery_tracking dt
      JOIN orders o ON o.id = dt.order_id
+     LEFT JOIN patient_identities pi ON pi.id = o.patient_identity_id
      WHERE dt.id = $1`,
     [id]
   );

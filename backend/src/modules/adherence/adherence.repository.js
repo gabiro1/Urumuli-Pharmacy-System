@@ -20,6 +20,16 @@ export async function listByPatient(patientId, { startDate, endDate, page = 1, l
   return { data: rows, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
 }
 
+export async function getEntryById(id) {
+  return queryOne(
+    `SELECT pa.*, m.name AS medicine_name
+     FROM patient_adherence pa
+     LEFT JOIN medicines m ON m.id = pa.medicine_id
+     WHERE pa.id = $1`,
+    [id]
+  );
+}
+
 export async function markTaken(id) {
   const [row] = await query(
     `UPDATE patient_adherence SET taken = TRUE, taken_at = NOW() WHERE id = $1 AND NOT taken RETURNING *`, [id]

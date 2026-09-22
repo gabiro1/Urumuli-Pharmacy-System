@@ -1,6 +1,9 @@
+import fs from 'fs';
 import * as prescriptionService from './prescription.service.js';
 import { sendSuccess, sendCreated } from '../../utils/response.js';
 import { ValidationError } from '../../utils/errors.js';
+import { createAuditLog } from '../../middlewares/auditLogger.js';
+import { AUDIT_ACTION, AUDIT_ENTITY } from '../../constants.js';
 import { createPrescriptionSchema } from './prescription.validation.js';
 
 function getUploadedFile(req) {
@@ -75,6 +78,20 @@ export async function getPrescription(req, res, next) {
   try {
     const prescription = await prescriptionService.getPrescription(req.params.id, req.user);
     return sendSuccess(res, prescription);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function downloadFile(req, res, next) {
+  try {
+    const file = await prescriptionService.getPrescriptionDocument(req.params.id, req.user);
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="prescription${file.extension}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    createAuditLog({ userId: req.user?.userId, action: AUDIT_ACTION.READ, entity: AUDIT_ENTITY.PRESCRIPTION_FILE, entityId: req.params.id, description: `Prescription ${req.params.id} document accessed`, ipAddress: req.ip, userAgent: req.get('User-Agent') }).catch(console.error);
+    return fs.createReadStream(file.absolutePath).on('error', next).pipe(res);
   } catch (error) {
     next(error);
   }
@@ -180,7 +197,7 @@ export async function createStaffPrescription(req, res, next) {
       req.user.userId
     );
     const result = file
-      ? await prescriptionService.uploadPrescriptionFile(prescription.id, file)
+      ? await prescriptionService.uploadPrescriptionFile(prescription.id, file, req.user)
       : prescription;
 
     return sendCreated(res, result, 'Prescription created successfully');

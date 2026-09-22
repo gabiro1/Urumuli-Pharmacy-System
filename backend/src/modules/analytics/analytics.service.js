@@ -18,7 +18,7 @@ export async function getOverview(queryParams) {
   const cacheKey = `analytics:overview:${days}`;
 
   return cacheRemember(cacheKey, 60, async () => {
-    const [salesDashboard, inventorySummary, prescriptionSummary, systemHealth, lowStockMedicines, expiringBatches, profitSummary, demandForecast] = await Promise.all([
+    const [salesDashboard, inventorySummary, prescriptionSummary, systemHealth, lowStockMedicines, expiringBatches, profitSummary, demandForecast, availabilitySummary] = await Promise.all([
       salesRepository.getDashboardData({ days, recentLimit: 10, topLimit: 10 }),
       inventoryRepository.getInventorySummary(),
       analyticsRepository.getPrescriptionSummary(),
@@ -27,6 +27,7 @@ export async function getOverview(queryParams) {
       analyticsRepository.getExpiringBatches(10),
       analyticsRepository.getProfitSummary({ days }),
       analyticsRepository.getDemandForecast({ days, horizon: 14, top: 8 }),
+      analyticsRepository.getAvailabilitySummary(),
     ]);
 
     const revenue = toNumber(profitSummary.totals?.revenue);
@@ -131,6 +132,14 @@ export async function getOverview(queryParams) {
         approved: toNumber(prescriptionSummary?.approved),
         completed: toNumber(prescriptionSummary?.completed),
         rejected: toNumber(prescriptionSummary?.rejected),
+      },
+      availability: {
+        total: toNumber(availabilitySummary?.total),
+        pending: toNumber(availabilitySummary?.pending),
+        physicallyAvailable: toNumber(availabilitySummary?.physically_available),
+        physicallyUnavailable: toNumber(availabilitySummary?.physically_unavailable),
+        inventoryUpdated: toNumber(availabilitySummary?.inventory_updated),
+        last7Days: toNumber(availabilitySummary?.last_7_days),
       },
       systemHealth: systemHealth.map((entry) => ({
         ...entry,

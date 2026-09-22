@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "check": "node --check src/aggregator.js && node --check src/consumer.js && node --check src/index.js"
   },
   "dependencies": {
     "pg": "^8.11.3",

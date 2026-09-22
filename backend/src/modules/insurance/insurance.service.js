@@ -1,5 +1,8 @@
 import * as repository from './insurance.repository.js';
 import { NotFoundError, ValidationError } from '../../utils/errors.js';
+import { assertResourceAccess } from '../../utils/resourceAccess.js';
+
+const CLAIM_STAFF_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PHARMACIST', 'AUDITOR'];
 
 export async function listProviders(filters) { return repository.listProviders(filters); }
 export async function getProvider(id) {
@@ -16,10 +19,23 @@ export async function updateProvider(id, data) {
   if (!p) throw new NotFoundError('Insurance provider', id);
   return p;
 }
-export async function listClaims(filters) { return repository.listClaims(filters); }
-export async function getClaim(id) {
+export async function listClaims(filters, user) {
+  assertResourceAccess(user, filters.patientId, {
+    staffRoles: CLAIM_STAFF_ROLES,
+    message: 'You can only list your own insurance claims',
+  });
+  const scopedFilters = user.role === 'PATIENT'
+    ? { ...filters, patientId: user.userId }
+    : filters;
+  return repository.listClaims(scopedFilters);
+}
+export async function getClaim(id, user) {
   const c = await repository.getClaim(id);
   if (!c) throw new NotFoundError('Insurance claim', id);
+  assertResourceAccess(user, c.patient_id, {
+    staffRoles: CLAIM_STAFF_ROLES,
+    message: 'You can only access your own insurance claims',
+  });
   return c;
 }
 export async function createClaim(data) {

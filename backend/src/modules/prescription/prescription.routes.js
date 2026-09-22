@@ -73,6 +73,12 @@ router.get(
 );
 
 router.get(
+  '/:id/file',
+  authenticate,
+  prescriptionController.downloadFile
+);
+
+router.get(
   '/:id',
   authenticate,
   prescriptionController.getPrescription

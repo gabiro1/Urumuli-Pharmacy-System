@@ -2,6 +2,7 @@ import { getQueue, addJob } from '../services/queue.service.js';
 import * as refillsService from '../modules/refills/refills.service.js';
 import * as expiryService from '../modules/expiry/expiry.service.js';
 import * as reorderService from '../modules/reorder/reorder.service.js';
+import * as ordersService from '../modules/orders/orders.service.js';
 import { createNotification } from '../services/notification.service.js';
 import { query } from '../config/database.js';
 
@@ -9,6 +10,7 @@ const SCHEDULED_JOBS = {
   refills: { type: 'process-due-refills', cron: '0 8 * * *' },
   expiry: { type: 'run-expiry-scan', cron: '0 7 * * *' },
   lowStock: { type: 'check-low-stock', cron: '0 */6 * * *' },
+  reservations: { type: 'release-expired-reservations', cron: '*/10 * * * *' },
 };
 
 async function broadcastLowStockAlerts() {
@@ -53,6 +55,12 @@ export function registerScheduledWorkers() {
       jobType: SCHEDULED_JOBS.lowStock.type,
       handler: async () => broadcastLowStockAlerts(),
       cron: SCHEDULED_JOBS.lowStock.cron,
+    },
+    {
+      queue: 'inventory',
+      jobType: SCHEDULED_JOBS.reservations.type,
+      handler: async () => ordersService.releaseExpiredReservations(),
+      cron: SCHEDULED_JOBS.reservations.cron,
     },
   ];
 

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
 import { Search, Pill } from 'lucide-react'
 import api from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PatientPageHeader, PatientPageShell } from '../components/PatientPageShell'
 
 export default function MedicinesPage() {
   const [search, setSearch] = useState('')
@@ -32,23 +32,20 @@ export default function MedicinesPage() {
   const medicines = data?.data || []
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6 p-6"
-    >
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Medicines</h1>
-        <p className="text-sm text-muted-foreground">Browse our medicine catalog</p>
-      </div>
+    <PatientPageShell>
+      <PatientPageHeader
+        eyebrow="Pharmacy catalogue"
+        title="Medicines"
+        description="Search the catalogue, review medicine details, and ask the pharmacist when something is unavailable."
+      />
 
-      <div className="relative max-w-md">
+      <div className="relative mb-7 max-w-xl">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Search medicines..."
           value={search}
           onChange={handleSearch}
-          className="pl-9"
+          className="h-11 rounded-xl pl-9"
         />
       </div>
 
@@ -74,7 +71,7 @@ export default function MedicinesPage() {
               transition={{ delay: i * 0.03 }}
             >
               <Card
-                className="cursor-pointer hover:shadow-md transition-all"
+                className="cursor-pointer rounded-2xl border-border/70 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
                 onClick={() => window.open(`${publicSiteUrl}/medicines/${med.id}`, '_blank', 'noopener,noreferrer')}
               >
                 <CardContent className="p-4">
@@ -120,6 +117,6 @@ export default function MedicinesPage() {
           </p>
         </div>
       )}
-    </motion.div>
+    </PatientPageShell>
   )
 }

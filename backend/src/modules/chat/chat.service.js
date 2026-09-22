@@ -5,6 +5,51 @@ import { CONVERSATION_STATUS, AUDIT_ACTION, AUDIT_ENTITY } from '../../constants
 import { mapConversation, mapMessage } from '../../utils/serializers.js';
 import { cacheRemember, invalidateCannedReplyCache } from '../../services/redis.service.js';
 import { createNotification } from '../../services/notification.service.js';
+import { assertConversationAccess } from '../../utils/resourceAccess.js';
+
+const PHARMACIST_DISPLAY_NAME = 'Urumuli pharmacist';
+
+function mapConversationForRole(conversation, userRole) {
+  const mapped = mapConversation(conversation);
+  if (userRole !== 'PATIENT') return mapped;
+
+  return {
+    ...mapped,
+    pharmacistName: PHARMACIST_DISPLAY_NAME,
+    pharmacistFirstName: null,
+    pharmacistLastName: null,
+  };
+}
+
+function mapMessageForRole(message, userRole) {
+  const mapped = mapMessage(message);
+  if (userRole !== 'PATIENT' || message.sender_role === 'PATIENT') return mapped;
+
+  return {
+    ...mapped,
+    firstName: null,
+    lastName: null,
+    role: 'PHARMACIST',
+  };
+}
+
+async function notifyStaffOfPatientMessage(conversationId, content) {
+  try {
+    const staff = await chatRepository.listStaffRecipients();
+    await Promise.all(
+      staff.map((row) => createNotification({
+        userId: row.id,
+        type: 'NEW_MESSAGE',
+        title: 'New message for pharmacist',
+        message: content.slice(0, 200),
+        referenceType: 'CONVERSATION',
+        referenceId: conversationId,
+      }))
+    );
+  } catch (error) {
+    console.error('[chat] failed to notify pharmacists:', error.message);
+  }
+}
 
 export async function startConversation(patientId, data, ipAddress, userAgent) {
   const conversation = await chatRepository.createConversation({
@@ -30,6 +75,11 @@ export async function startConversation(patientId, data, ipAddress, userAgent) {
     description: 'Conversation created',
   });
 
+  await notifyStaffOfPatientMessage(
+    conversation.id,
+    data.message || `Started conversation: ${data.subject}`
+  );
+
   await createAuditLog({
     userId: patientId,
     action: AUDIT_ACTION.CREATE,
@@ -41,13 +91,13 @@ export async function startConversation(patientId, data, ipAddress, userAgent) {
   });
 
   const fullConversation = await chatRepository.findConversationById(conversation.id);
-  return mapConversation(fullConversation);
+  return mapConversationForRole(fullConversation, 'PATIENT');
 }
 
 export async function getPatientConversations(patientId, query) {
   const result = await chatRepository.listPatientConversations(patientId, query);
   return {
-    data: result.data.map((conversation) => mapConversation(conversation)),
+    data: result.data.map((conversation) => mapConversationForRole(conversation, 'PATIENT')),
     meta: result.meta,
   };
 }
@@ -56,20 +106,16 @@ export async function getConversation(conversationId, userId, userRole) {
   const conversation = await chatRepository.findConversationById(conversationId);
   if (!conversation) throw new NotFoundError('Conversation not found');
 
-  if (userRole === 'PATIENT' && conversation.patient_id !== userId) {
-    throw new ForbiddenError('You can only access your own conversations');
-  }
+  assertConversationAccess({ userId, role: userRole }, conversation);
 
-  return mapConversation(conversation);
+  return mapConversationForRole(conversation, userRole);
 }
 
 export async function getMessages(conversationId, userId, userRole, query) {
   const conversation = await chatRepository.findConversationById(conversationId);
   if (!conversation) throw new NotFoundError('Conversation not found');
 
-  if (userRole === 'PATIENT' && conversation.patient_id !== userId) {
-    throw new ForbiddenError('You can only access your own conversations');
-  }
+  assertConversationAccess({ userId, role: userRole }, conversation);
 
   const result = await chatRepository.getMessages(conversationId, query);
 
@@ -77,7 +123,7 @@ export async function getMessages(conversationId, userId, userRole, query) {
     result.data = result.data.filter((m) => !m.is_private_note);
   }
 
-  result.data = result.data.map((message) => mapMessage(message));
+  result.data = result.data.map((message) => mapMessageForRole(message, userRole));
   return result;
 }
 
@@ -86,9 +132,7 @@ export async function sendMessage(conversationId, userId, userRole, data, ipAddr
   if (!conversation) throw new NotFoundError('Conversation not found');
   if (conversation.status === 'CLOSED') throw new ValidationError('Conversation is closed');
 
-  if (userRole === 'PATIENT' && conversation.patient_id !== userId) {
-    throw new ForbiddenError('You can only send messages in your own conversations');
-  }
+  assertConversationAccess({ userId, role: userRole }, conversation);
 
   const isPrivateNote = data.isPrivateNote === true && userRole !== 'PATIENT';
 
@@ -128,19 +172,21 @@ export async function sendMessage(conversationId, userId, userRole, data, ipAddr
   });
 
   if (!isPrivateNote) {
-    const recipientId = userRole === 'PATIENT' ? conversation.assigned_pharmacist_id : conversation.patient_id;
-    const title = userRole === 'PATIENT' ? 'New message for pharmacist' : 'New message from the pharmacy';
-    createNotification({
-      userId: recipientId,
-      type: 'NEW_MESSAGE',
-      title,
-      message: data.content.slice(0, 200),
-      referenceType: 'CONVERSATION',
-      referenceId: conversationId,
-    });
+    if (userRole === 'PATIENT') {
+      await notifyStaffOfPatientMessage(conversationId, data.content);
+    } else {
+      await createNotification({
+        userId: conversation.patient_id,
+        type: 'NEW_MESSAGE',
+        title: 'New message from the pharmacy',
+        message: data.content.slice(0, 200),
+        referenceType: 'CONVERSATION',
+        referenceId: conversationId,
+      });
+    }
   }
 
-  return mapMessage(message);
+  return mapMessageForRole(message, userRole);
 }
 
 export async function assignConversation(conversationId, pharmacistId, actorId, ipAddress, userAgent) {
@@ -189,9 +235,7 @@ export async function closeConversation(conversationId, userId, userRole, ipAddr
   const conversation = await chatRepository.findConversationById(conversationId);
   if (!conversation) throw new NotFoundError('Conversation not found');
 
-  if (userRole === 'PATIENT' && conversation.patient_id !== userId) {
-    throw new ForbiddenError('You can only close your own conversations');
-  }
+  assertConversationAccess({ userId, role: userRole }, conversation);
 
   const result = await chatRepository.updateConversationStatus(conversationId, 'CLOSED', userId);
 
@@ -215,7 +259,11 @@ export async function closeConversation(conversationId, userId, userRole, ipAddr
   return mapConversation(result);
 }
 
-export async function reopenConversation(conversationId, userId, _ipAddress, _userAgent) {
+export async function reopenConversation(conversationId, userId, userRole, _ipAddress, _userAgent) {
+  const conversation = await chatRepository.findConversationById(conversationId);
+  if (!conversation) throw new NotFoundError('Conversation not found');
+  assertConversationAccess({ userId, role: userRole }, conversation);
+
   const result = await chatRepository.updateConversationStatus(conversationId, 'WAITING_PHARMACIST', userId);
 
   await chatRepository.addConversationEvent({
@@ -228,7 +276,11 @@ export async function reopenConversation(conversationId, userId, _ipAddress, _us
   return mapConversation(result);
 }
 
-export async function markAsRead(conversationId, userId) {
+export async function markAsRead(conversationId, userId, userRole) {
+  const conversation = await chatRepository.findConversationById(conversationId);
+  if (!conversation) throw new NotFoundError('Conversation not found');
+  assertConversationAccess({ userId, role: userRole }, conversation);
+
   return chatRepository.markMessagesAsRead(conversationId, userId);
 }
 

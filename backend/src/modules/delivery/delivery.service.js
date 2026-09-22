@@ -1,5 +1,8 @@
 import * as repository from './delivery.repository.js';
 import { NotFoundError, ValidationError } from '../../utils/errors.js';
+import { assertResourceAccess } from '../../utils/resourceAccess.js';
+
+const DELIVERY_STAFF_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PHARMACIST'];
 
 const VALID_TRANSITIONS = {
   PENDING: ['PICKED_UP', 'CANCELLED'],
@@ -16,14 +19,24 @@ export async function createDelivery(data) {
   return repository.create(data);
 }
 
-export async function getDelivery(id) {
+export async function getDelivery(id, user) {
   const delivery = await repository.getById(id);
   if (!delivery) throw new NotFoundError('Delivery', id);
+  assertResourceAccess(user, delivery.patient_user_id, {
+    staffRoles: DELIVERY_STAFF_ROLES,
+    message: 'You can only access your own delivery information',
+  });
   return delivery;
 }
 
-export async function getByOrder(orderId) {
-  return repository.getByOrderId(orderId);
+export async function getByOrder(orderId, user) {
+  const delivery = await repository.getByOrderId(orderId);
+  if (!delivery) throw new NotFoundError('Delivery');
+  assertResourceAccess(user, delivery.patient_user_id, {
+    staffRoles: DELIVERY_STAFF_ROLES,
+    message: 'You can only access your own delivery information',
+  });
+  return delivery;
 }
 
 export async function updateDeliveryStatus(id, status, extra = {}) {

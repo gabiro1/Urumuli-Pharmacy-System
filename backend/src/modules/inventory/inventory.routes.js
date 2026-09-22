@@ -26,13 +26,13 @@ router.get('/medicines/:id', optionalAuth, inventoryController.getMedicine);
 router.get('/products', optionalAuth, inventoryController.listMedicines);
 router.get('/products/:id', optionalAuth, inventoryController.getMedicine);
 
-router.get('/suppliers', inventoryController.listSuppliers);
-router.get('/suppliers/:id', inventoryController.getSupplier);
+router.get('/suppliers', authenticate, authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.PHARMACIST, ROLES.INVENTORY_MANAGER), inventoryController.listSuppliers);
+router.get('/suppliers/:id', authenticate, authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.PHARMACIST, ROLES.INVENTORY_MANAGER), inventoryController.getSupplier);
 
-router.get('/batches', authenticate, inventoryController.listBatches);
-router.get('/batches/:id', authenticate, inventoryController.getBatch);
+router.get('/batches', authenticate, authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.PHARMACIST, ROLES.INVENTORY_MANAGER), inventoryController.listBatches);
+router.get('/batches/:id', authenticate, authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.PHARMACIST, ROLES.INVENTORY_MANAGER), inventoryController.getBatch);
 
-router.get('/stock-movements', authenticate, inventoryController.listStockMovements);
+router.get('/stock-movements', authenticate, authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.PHARMACIST, ROLES.INVENTORY_MANAGER), inventoryController.listStockMovements);
 
 router.use(authenticate);
 router.use(authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.PHARMACIST, ROLES.INVENTORY_MANAGER));

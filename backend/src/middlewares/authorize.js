@@ -32,6 +32,29 @@ export function authorize(...allowedRoles) {
   };
 }
 
+/**
+ * Require one of the listed roles without applying the staff hierarchy.
+ * Use this when a route mixes patient and staff roles or when elevation would
+ * be unsafe (for example, a patient-owned health resource).
+ */
+export function authorizeExact(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return next(new ForbiddenError('Authentication required'));
+    }
+
+    if (allowedRoles.includes(req.user.role)) {
+      return next();
+    }
+
+    return next(
+      new ForbiddenError(
+        `Role '${req.user.role}' does not have permission for this action. Required: ${allowedRoles.join(', ')}`
+      )
+    );
+  };
+}
+
 export function selfOrAdmin(paramUserIdField = 'userId') {
   return (req, res, next) => {
     if (!req.user) {

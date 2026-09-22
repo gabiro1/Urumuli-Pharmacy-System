@@ -9,13 +9,76 @@ import { env } from '../../config/env.js';
 import { PRESCRIPTION_STATUS } from '../../constants.js';
 import { mapPrescription } from '../../utils/serializers.js';
 
+const PRESCRIPTION_STAFF_ROLES = Object.freeze([
+  'SUPER_ADMIN',
+  'ADMIN',
+  'MANAGER',
+  'PHARMACIST',
+  'AUDITOR',
+]);
+
+function assertPrescriptionAccess(user, prescription, { upload = false } = {}) {
+  if (!user) throw new ForbiddenError('Authentication required');
+
+  if (user.role === 'PATIENT') {
+    if (prescription.patient_id !== user.userId) {
+      throw new ForbiddenError(
+        upload
+          ? 'You can only upload files to your own prescriptions'
+          : 'You can only view your own prescriptions'
+      );
+    }
+    return;
+  }
+
+  const allowedStaffRoles = upload
+    ? ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PHARMACIST']
+    : PRESCRIPTION_STAFF_ROLES;
+  if (!allowedStaffRoles.includes(user.role)) {
+    throw new ForbiddenError('You do not have permission to access this prescription');
+  }
+}
+
+function identifyPrescriptionFile(file) {
+  const buffer = file?.buffer;
+  if (!buffer?.length) throw new ValidationError('Prescription file is empty');
+
+  if (buffer.toString('ascii', 0, 5) === '%PDF-') {
+    return { mimeType: 'application/pdf', extension: '.pdf' };
+  }
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return { mimeType: 'image/jpeg', extension: '.jpg' };
+  }
+  if (buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    return { mimeType: 'image/png', extension: '.png' };
+  }
+  if (buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
+    return { mimeType: 'image/webp', extension: '.webp' };
+  }
+  if (['GIF87a', 'GIF89a'].includes(buffer.toString('ascii', 0, 6))) {
+    return { mimeType: 'image/gif', extension: '.gif' };
+  }
+
+  throw new ValidationError('Unsupported prescription file. Upload a PDF, JPG, PNG, WebP, or GIF file.');
+}
+
+function resolvePrivateUploadPath(storageKey) {
+  const uploadRoot = path.resolve(env.UPLOAD_DIR);
+  const absolutePath = path.resolve(uploadRoot, storageKey);
+  const relativePath = path.relative(uploadRoot, absolutePath);
+
+  if (!relativePath || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+    throw new ValidationError('Invalid prescription storage path');
+  }
+
+  return absolutePath;
+}
+
 export async function getPrescription(id, user) {
   const prescription = await prescriptionRepository.findById(id);
   if (!prescription) throw new NotFoundError('Prescription', id);
 
-  if (user.role === 'PATIENT' && prescription.patient_id !== user.userId) {
-    throw new ForbiddenError('You can only view your own prescriptions');
-  }
+  assertPrescriptionAccess(user, prescription);
 
   const items = await prescriptionRepository.getPrescriptionItems(id);
   return mapPrescription(prescription, items);
@@ -126,26 +189,45 @@ export async function uploadPrescriptionFile(prescriptionId, file, user = null) 
   const prescription = await prescriptionRepository.findById(prescriptionId);
   if (!prescription) throw new NotFoundError('Prescription', prescriptionId);
 
-  if (user?.role === 'PATIENT' && prescription.patient_id !== user.userId) {
-    throw new ForbiddenError('You can only upload files to your own prescriptions');
-  }
+  assertPrescriptionAccess(user, prescription, { upload: true });
 
   const uploadDir = path.resolve(env.UPLOAD_DIR, 'prescriptions');
   await fs.mkdir(uploadDir, { recursive: true });
 
-  const ext = path.extname(file.originalname);
-  const filename = `${prescriptionId}_${crypto.randomBytes(8).toString('hex')}${ext}`;
+  const detected = identifyPrescriptionFile(file);
+  const filename = `${prescriptionId}_${crypto.randomBytes(8).toString('hex')}${detected.extension}`;
   const filepath = path.join(uploadDir, filename);
 
-  await fs.writeFile(filepath, file.buffer);
+  await fs.writeFile(filepath, file.buffer, { flag: 'wx' });
 
   const updated = await prescriptionRepository.updateFilePath(
     prescriptionId,
     `prescriptions/${filename}`,
-    file.mimetype
+    detected.mimeType
   );
   const items = await prescriptionRepository.getPrescriptionItems(prescriptionId);
   return mapPrescription(updated, items);
+}
+
+export async function getPrescriptionDocument(id, user) {
+  const prescription = await prescriptionRepository.findById(id);
+  if (!prescription) throw new NotFoundError('Prescription', id);
+
+  assertPrescriptionAccess(user, prescription);
+  if (!prescription.file_path) throw new NotFoundError('Prescription file', id);
+
+  const absolutePath = resolvePrivateUploadPath(prescription.file_path);
+  try {
+    await fs.stat(absolutePath);
+  } catch {
+    throw new NotFoundError('Prescription file', id);
+  }
+
+  return {
+    absolutePath,
+    mimeType: prescription.file_type || 'application/octet-stream',
+    extension: path.extname(absolutePath) || '.bin',
+  };
 }
 
 export async function reviewPrescription(id, pharmacistId) {

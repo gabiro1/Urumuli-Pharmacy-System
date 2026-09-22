@@ -26,7 +26,7 @@ const values = [
   {
     icon: Heart,
     title: 'Patient-Centered Care',
-    description: 'Every feature we build puts patients first — making healthcare more accessible, transparent, and convenient.',
+    description: 'Every feature we build puts patients first - making healthcare more accessible, transparent, and convenient.',
   },
   {
     icon: Shield,
@@ -142,8 +142,8 @@ export default function AboutPage() {
                 </div>
                 <h3 className="text-xl font-bold mb-3">Our Vision</h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  A world where every prescription is handled digitally — from submission to
-                  fulfillment — making healthcare faster, safer, and more accessible for
+                  A world where every prescription is handled digitally - from submission to
+                  fulfillment - making healthcare faster, safer, and more accessible for
                   patients and providers alike.
                 </p>
               </CardContent>

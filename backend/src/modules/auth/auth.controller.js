@@ -145,6 +145,15 @@ export async function updatePatientProfile(req, res, next) {
   }
 }
 
+export async function uploadPatientAvatar(req, res, next) {
+  try {
+    const profile = await authService.uploadPatientAvatar(req.user.userId, req.file);
+    return sendSuccess(res, profile, 'Profile photo updated');
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getPatientSettings(req, res, next) {
   try {
     const settings = await authService.getPatientSettings(req.user.userId);
@@ -163,6 +172,24 @@ export async function updatePatientSettings(req, res, next) {
       req.get('User-Agent')
     );
     return sendSuccess(res, settings, 'Settings updated');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function exportPatientData(req, res, next) {
+  try {
+    const data = await authService.exportPatientData(req.user.userId);
+    return sendSuccess(res, data, 'Patient data export');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deletePatientAccount(req, res, next) {
+  try {
+    const result = await authService.deletePatientAccount(req.user.userId, req.ip, req.get('User-Agent'));
+    return sendSuccess(res, result, 'Account anonymized');
   } catch (error) {
     next(error);
   }

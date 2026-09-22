@@ -4,7 +4,7 @@ import { sendSuccess, sendCreated, sendPaginated } from '../../utils/response.js
 export async function listReminders(req, res, next) {
   try {
     const patientId = req.params.patientId || req.user.userId;
-    const result = await service.listReminders(patientId, req.query);
+    const result = await service.listReminders(patientId, req.query, req.user);
     return sendPaginated(res, result.data, result.meta);
   } catch (error) { next(error); }
 }
@@ -18,14 +18,14 @@ export async function createReminder(req, res, next) {
 
 export async function cancelReminder(req, res, next) {
   try {
-    const reminder = await service.cancelReminder(req.params.id);
+    const reminder = await service.cancelReminder(req.params.id, req.user);
     return sendSuccess(res, reminder, 'Reminder cancelled');
   } catch (error) { next(error); }
 }
 
 export async function completeReminder(req, res, next) {
   try {
-    const reminder = await service.completeReminder(req.params.id);
+    const reminder = await service.completeReminder(req.params.id, req.user);
     return sendSuccess(res, reminder, 'Reminder completed');
   } catch (error) { next(error); }
 }

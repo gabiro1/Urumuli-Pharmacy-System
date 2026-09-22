@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import * as authController from './auth.controller.js';
 import { authenticate } from '../../middlewares/authenticate.js';
 import { authorize } from '../../middlewares/authorize.js';
@@ -27,6 +28,10 @@ import {
 import { ROLES } from '../../constants.js';
 
 const router = Router();
+const profileAvatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+});
 
 router.post('/login', authLimiter, validate(loginSchema), authController.login);
 router.post('/google', authLimiter, validate(googleSignInSchema), authController.googleSignIn);
@@ -49,8 +54,13 @@ router.post('/change-password', authenticate, validate(changePasswordSchema), au
 router.get('/profile', authenticate, authController.getProfile);
 router.get('/patient/profile', authenticate, authorize(ROLES.PATIENT), authController.getPatientProfile);
 router.put('/patient/profile', authenticate, authorize(ROLES.PATIENT), validate(patientProfileUpdateSchema), authController.updatePatientProfile);
+router.post('/patient/profile/avatar', authenticate, authorize(ROLES.PATIENT), profileAvatarUpload.single('avatar'), authController.uploadPatientAvatar);
 router.get('/patient/settings', authenticate, authorize(ROLES.PATIENT), authController.getPatientSettings);
 router.put('/patient/settings', authenticate, authorize(ROLES.PATIENT), validate(patientSettingsSchema), authController.updatePatientSettings);
+// Data protection: portable copy of the patient's own data (GDPR art. 20).
+router.get('/patient/data-export', authenticate, authorize(ROLES.PATIENT), authController.exportPatientData);
+// Right to erasure (GDPR art. 17): anonymizes identity and strips PHI fields.
+router.delete('/patient/account', authenticate, authorize(ROLES.PATIENT), authController.deletePatientAccount);
 router.get('/users', authenticate, authorize(ROLES.ADMIN, ROLES.AUDITOR), authController.listUsers);
 router.get('/roles', authController.listRoles);
 router.post('/users', authenticate, authorize(ROLES.ADMIN, ROLES.MANAGER), validate(createUserSchema), authController.createUser);

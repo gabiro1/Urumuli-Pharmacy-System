@@ -1,13 +1,20 @@
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs/promises';
-import { transaction } from '../../config/database.js';
+import { transaction, query } from '../../config/database.js';
 import { env } from '../../config/env.js';
 import { ORDER_STATUS } from '../../constants.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../utils/errors.js';
 import * as repo from './orders.repository.js';
 import { canTransition, instructionErrors, orderTransitions } from './orderState.js';
 import { notifyOrderPatient } from '../../services/notification.service.js';
+import {
+  initiatePayment,
+  recordPaymentWebhook,
+  scheduleSandboxSettlement,
+  getAttempts,
+} from '../payments/payment.service.js';
+import { isProviderConfigured } from '../payments/payment.providers.js';
 
 const normalizePhone = (phone) => phone.replace(/[\s()-]/g,'');
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
@@ -20,6 +27,21 @@ const assertOwner = async (order,user) => {
 export async function getOrder(id,user){ const order=await repo.findOrder(id); if(!order)throw new NotFoundError('Order',id);await assertOwner(order,user);return {...order,items:await repo.getOrderItems(order.id),instructions:await repo.getInstructions(order.id),history:await repo.getHistory(order.id),prescriptionFiles:await repo.getPrescriptionFiles(order.id)}; }
 export const listMyOrders = async (user) => { const identityId=user.patientIdentityId||(await repo.findIdentityByUser(user.userId))?.id;if(!identityId)throw new ForbiddenError('Verified patient identity required');return repo.listOwnedOrders(identityId); };
 export const listQueue = (params) => repo.listQueue(params);
+
+/**
+ * Release inventory reservations whose expiry window has lapsed. Called by the
+ * scheduled worker so abandoned carts and unpaid orders stop holding stock.
+ */
+export async function releaseExpiredReservations() {
+  const result = await query(
+    `UPDATE inventory_reservations
+        SET status='RELEASED', released_at=NOW()
+      WHERE status='ACTIVE' AND expires_at <= NOW()
+      RETURNING id, order_item_id, medicine_id, quantity`,
+    []
+  );
+  return { released: result.rowCount, reservations: result.rows.map((r) => r.id) };
+}
 
 export async function createOrder(data,user,idempotencyKey){
   let resolvedIdentityId=user.patientIdentityId||(await repo.findIdentityByUser(user.userId))?.id;
@@ -112,8 +134,111 @@ export async function uploadPrescription(orderId,files,user){const order=await r
 
 export async function getPrescriptionFile(fileId,user){const file=await repo.findPrescriptionFile(fileId);if(!file)throw new NotFoundError('Prescription file',fileId);const order=await repo.findOrder(file.order_id);await assertOwner(order,user);return {...file,absolutePath:path.resolve(env.UPLOAD_DIR,file.storage_key)};}
 
-export async function startPayment(orderId,user,idempotencyKey,method){const order=await repo.findOrder(orderId);if(!order)throw new NotFoundError('Order',orderId);await assertOwner(order,user);if(order.status!==ORDER_STATUS.APPROVED_AWAITING_PAYMENT)throw new ValidationError('Payment is available only after approval and patient confirmation');if(!idempotencyKey)throw new ValidationError('Idempotency-Key header is required');
-  if(method==='PAY_ON_PICKUP'){if(order.fulfilment_method!=='PICKUP')throw new ValidationError('Pay on pickup is available only for pickup orders');return transaction(async(client)=>{const prior=(await client.query(`SELECT response_body FROM idempotency_records WHERE scope='DEFER_PAYMENT' AND idempotency_key=$1 AND owner_key=$2`,[idempotencyKey,order.patient_identity_id])).rows[0];if(prior)return prior.response_body;await client.query(`UPDATE orders SET payment_method='PAY_ON_PICKUP',payment_status='DUE_ON_PICKUP',status='PAYMENT_DEFERRED' WHERE id=$1`,[order.id]);await repo.addHistory(client,{orderId:order.id,previousStatus:order.status,newStatus:'PAYMENT_DEFERRED',actorId:user.userId,actorRole:user.role,reason:'Patient selected pay on pickup'});const result={status:'PAYMENT_DEFERRED',paymentStatus:'DUE_ON_PICKUP',message:'Payment will be collected at the pharmacy.'};await client.query(`INSERT INTO idempotency_records(scope,idempotency_key,owner_key,response_status,response_body) VALUES('DEFER_PAYMENT',$1,$2,200,$3)`,[idempotencyKey,order.patient_identity_id,result]);return result;});}
-  if(env.PAYMENT_PROVIDER==='development')return {status:'NOT_PROCESSED',providerConfigured:false,message:'Card and mobile-money payments are not configured. No charge was attempted.'};throw new ValidationError('Configured payment provider adapter is not available');}
+export async function startPayment(orderId,user,idempotencyKey,method){
+  const order=await repo.findOrder(orderId);if(!order)throw new NotFoundError('Order',orderId);await assertOwner(order,user);if(order.status!==ORDER_STATUS.APPROVED_AWAITING_PAYMENT)throw new ValidationError('Payment is available only after approval and patient confirmation');if(!idempotencyKey)throw new ValidationError('Idempotency-Key header is required');
+  if(method==='PAY_ON_PICKUP'||method==='CASH'){if(method==='PAY_ON_PICKUP'&&order.fulfilment_method!=='PICKUP')throw new ValidationError('Pay on pickup is available only for pickup orders');return transaction(async(client)=>{const prior=(await client.query(`SELECT response_body FROM idempotency_records WHERE scope='DEFER_PAYMENT' AND idempotency_key=$1 AND owner_key=$2`,[idempotencyKey,order.patient_identity_id])).rows[0];if(prior)return prior.response_body;await client.query(`UPDATE orders SET payment_method=$2,payment_status='DUE_ON_PICKUP',status='PAYMENT_DEFERRED' WHERE id=$1`,[order.id,method]);await repo.addHistory(client,{orderId:order.id,previousStatus:order.status,newStatus:'PAYMENT_DEFERRED',actorId:user.userId,actorRole:user.role,reason:'Patient selected pay at pickup'});const result={status:'PAYMENT_DEFERRED',paymentStatus:'DUE_ON_PICKUP',message:'Payment will be collected at the pharmacy.'};await client.query(`INSERT INTO idempotency_records(scope,idempotency_key,owner_key,response_status,response_body) VALUES('DEFER_PAYMENT',$1,$2,200,$3)`,[idempotencyKey,order.patient_identity_id,result]);return result;});}
+  if(env.PAYMENT_PROVIDER==='development')return await transaction(async(client)=>{const prior=(await client.query(`SELECT response_body FROM idempotency_records WHERE scope='START_PAYMENT' AND idempotency_key=$1 AND owner_key=$2`,[idempotencyKey,order.patient_identity_id])).rows[0];if(prior)return prior.response_body;const result={status:'NOT_PROCESSED',providerConfigured:false,message:'Card and mobile-money payments are not configured. No charge was attempted.'};await client.query(`INSERT INTO idempotency_records(scope,idempotency_key,owner_key,response_status,response_body) VALUES('START_PAYMENT',$1,$2,200,$3)`,[idempotencyKey,order.patient_identity_id,result]);return result;});
+  if(!['CARD','MOBILE_MONEY'].includes(method))throw new ValidationError('Unsupported payment method');
+
+  const { attempt, providerStatus, simulated } = await initiatePayment({ order, user, idempotencyKey, method });
+
+  await transaction(async (client) => {
+    await client.query(`UPDATE orders SET payment_status='PROCESSING',payment_method=$2 WHERE id=$1`,[order.id,method]);
+    await client.query(`UPDATE orders SET status='PAYMENT_PROCESSING' WHERE id=$1`,[order.id]);
+    await repo.addHistory(client,{orderId:order.id,previousStatus:order.status,newStatus:ORDER_STATUS.PAYMENT_PROCESSING,actorId:user.userId,actorRole:user.role,reason:'Payment initiated',metadata:{provider:attempt.provider}});
+  });
+
+  if (providerStatus === 'SUCCEEDED') {
+    await confirmPayment({ orderId: order.id, attemptId: attempt.id, user });
+    const fresh = await repo.findOrder(order.id);
+    return {
+      status: 'PAYMENT_RECEIVED',
+      paymentStatus: 'PAID',
+      provider: attempt.provider,
+      providerReference: attempt.provider_reference,
+      attemptId: attempt.id,
+      simulated,
+      message: 'Payment received. Your order is being prepared.',
+      order: { id: order.id, status: fresh.status, reference: fresh.public_reference },
+    };
+  }
+
+  scheduleSandboxSettlement(attempt, ({ attemptId }) => confirmPayment({ orderId: order.id, attemptId }));
+
+  const fresh = await repo.findOrder(order.id);
+  return {
+    status: 'PAYMENT_PROCESSING',
+    paymentStatus: 'PROCESSING',
+    provider: attempt.provider,
+    providerReference: attempt.provider_reference,
+    attemptId: attempt.id,
+    simulated,
+    message: 'Payment is being processed. You will be notified when it is received.',
+    order: { id: order.id, status: fresh.status, reference: fresh.public_reference },
+  };
+}
+
+/**
+ * Settle a payment attempt. Shared by webhook handlers and the sandbox
+ * scheduler. Idempotent: once the order leaves PAYMENT_PROCESSING the call is
+ * a no-op, so duplicates (a webhook replay, a retried sandbox timer) are safe.
+ */
+export async function confirmPayment({ orderId, attemptId, result, user = { userId: null, role: 'SYSTEM' } }) {
+  const attempt = (await query('SELECT * FROM payment_attempts WHERE id=$1', [attemptId])).rows[0];
+  if (!attempt) throw new NotFoundError('Payment attempt', attemptId);
+  const desired = result === 'FAILED' ? 'FAILED' : 'SUCCEEDED';
+
+  const { order } = await transaction(async (client) => {
+    const locked = (await client.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE', [orderId])).rows[0];
+    if (!locked) throw new NotFoundError('Order', orderId);
+    // Make the attempt status match the outcome (idempotent).
+    await client.query(`UPDATE payment_attempts SET status=$1, updated_at=NOW() WHERE id=$2`, [desired, attemptId]);
+    await client.query(`UPDATE orders SET payment_status=$1 WHERE id=$2`, [desired === 'SUCCEEDED' ? 'PAID' : 'FAILED', orderId]);
+    return { order: locked };
+  });
+
+  if (order.status === ORDER_STATUS.PAYMENT_PROCESSING) {
+    const target = desired === 'SUCCEEDED' ? ORDER_STATUS.PAYMENT_RECEIVED : ORDER_STATUS.APPROVED_AWAITING_PAYMENT;
+    return transitionOrder(orderId, target, user, {
+      reason: desired === 'SUCCEEDED' ? 'Payment received' : 'Payment failed; patient may retry',
+    });
+  }
+  return order;
+}
+
+/**
+ * Entry point for provider webhooks. Verifies the signature, marks the attempt
+ * and transitions the order. Returns null when the provider reference is not
+ * ours so the route can respond 404 without alarming the provider.
+ */
+export async function settleFromWebhook(providerName, rawBody, headers) {
+  const { matched, status, attempt } = await recordPaymentWebhook(providerName, rawBody, headers);
+  if (!matched) return null;
+  await confirmPayment({
+    orderId: attempt.order_id,
+    attemptId: attempt.id,
+    result: status === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED',
+  });
+  return { matched: true, orderId: attempt.order_id, status };
+}
+
+export async function getPaymentSummary(orderId, user) {
+  const order = await repo.findOrder(orderId);
+  if (!order) throw new NotFoundError('Order', orderId);
+  await assertOwner(order, user);
+  const attempts = await getAttempts(order.id);
+  return {
+    status: order.status,
+    paymentStatus: order.payment_status,
+    paymentMethod: order.payment_method,
+    total: order.total,
+    currency: order.currency,
+    attempts,
+  };
+}
+
+export async function paymentProviderStatus() {
+  return isProviderConfigured();
+}
 
 export { orderTransitions as transitions };

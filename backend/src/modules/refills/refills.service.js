@@ -1,9 +1,10 @@
 import * as repository from './refills.repository.js';
 import { NotFoundError, ValidationError } from '../../utils/errors.js';
+import { assertResourceAccess } from '../../utils/resourceAccess.js';
 import { createNotification } from '../../services/notification.service.js';
-import { query } from '../../config/database.js';
 
-export async function listReminders(patientId, filters) {
+export async function listReminders(patientId, filters, user) {
+  assertResourceAccess(user, patientId);
   return repository.listReminders(patientId, filters);
 }
 
@@ -12,13 +13,22 @@ export async function createReminder(data) {
   return repository.createReminder(data);
 }
 
-export async function cancelReminder(id) {
+async function loadOwnedReminder(id, user) {
+  const reminder = await repository.getReminder(id);
+  if (!reminder) throw new NotFoundError('Refill reminder', id);
+  assertResourceAccess(user, reminder.patient_id, { message: 'You do not have permission to modify this reminder' });
+  return reminder;
+}
+
+export async function cancelReminder(id, user) {
+  await loadOwnedReminder(id, user);
   const updated = await repository.updateReminder(id, { status: 'CANCELLED' });
   if (!updated) throw new NotFoundError('Refill reminder', id);
   return updated;
 }
 
-export async function completeReminder(id) {
+export async function completeReminder(id, user) {
+  await loadOwnedReminder(id, user);
   const updated = await repository.updateReminder(id, { status: 'COMPLETED' });
   if (!updated) throw new NotFoundError('Refill reminder', id);
   return updated;
@@ -40,7 +50,8 @@ export async function processDueReminders() {
   return { notified: due.length };
 }
 
-export async function deleteReminder(id) {
+export async function deleteReminder(id, user) {
+  await loadOwnedReminder(id, user);
   const deleted = await repository.deleteReminder(id);
   if (!deleted) throw new NotFoundError('Refill reminder', id);
   return deleted;

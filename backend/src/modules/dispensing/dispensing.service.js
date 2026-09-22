@@ -1,13 +1,17 @@
 import * as repository from './dispensing.repository.js';
 import { NotFoundError, ValidationError } from '../../utils/errors.js';
+import { assertResourceAccess } from '../../utils/resourceAccess.js';
 
 export async function listRecords(filters) {
   return repository.listRecords(filters);
 }
 
-export async function getRecord(id) {
+export async function getRecord(id, user) {
   const record = await repository.getRecord(id);
   if (!record) throw new NotFoundError('Dispensing record', id);
+  assertResourceAccess(user, record.patient_id, {
+    staffRoles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PHARMACIST'],
+  });
   return record;
 }
 

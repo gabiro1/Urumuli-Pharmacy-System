@@ -3,14 +3,14 @@ import { sendSuccess, sendCreated, sendPaginated } from '../../utils/response.js
 
 export async function getByOrder(req, res, next) {
   try {
-    const delivery = await service.getByOrder(req.params.orderId);
+    const delivery = await service.getByOrder(req.params.orderId, req.user);
     return sendSuccess(res, delivery);
   } catch (error) { next(error); }
 }
 
 export async function getDelivery(req, res, next) {
   try {
-    const delivery = await service.getDelivery(req.params.id);
+    const delivery = await service.getDelivery(req.params.id, req.user);
     return sendSuccess(res, delivery);
   } catch (error) { next(error); }
 }

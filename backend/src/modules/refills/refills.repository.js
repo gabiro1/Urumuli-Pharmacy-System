@@ -41,6 +41,16 @@ export async function createReminder(data) {
   return row;
 }
 
+export async function getReminder(id) {
+  return queryOne(
+    `SELECT rr.*, m.name AS medicine_name
+     FROM refill_reminders rr
+     LEFT JOIN medicines m ON m.id = rr.medicine_id
+     WHERE rr.id = $1`,
+    [id]
+  );
+}
+
 export async function updateReminder(id, updates) {
   const fields = [];
   const params = [];

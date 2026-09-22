@@ -10,7 +10,7 @@ export async function listRecords(req, res, next) {
 
 export async function getRecord(req, res, next) {
   try {
-    const record = await service.getRecord(req.params.id);
+    const record = await service.getRecord(req.params.id, req.user);
     return sendSuccess(res, record);
   } catch (error) { next(error); }
 }

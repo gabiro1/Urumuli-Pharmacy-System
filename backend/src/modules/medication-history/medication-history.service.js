@@ -1,15 +1,19 @@
 import * as repository from './medication-history.repository.js';
-import { NotFoundError, ValidationError } from '../../utils/errors.js';
+import { NotFoundError } from '../../utils/errors.js';
+import { assertResourceAccess } from '../../utils/resourceAccess.js';
 
-export async function listHistory(patientId, filters) {
+export async function listHistory(patientId, filters, user) {
+  assertResourceAccess(user, patientId);
   return repository.listPatientHistory(patientId, filters);
 }
 
-export async function getActiveMedications(patientId) {
+export async function getActiveMedications(patientId, user) {
+  assertResourceAccess(user, patientId);
   return repository.getActiveMedications(patientId);
 }
 
-export async function getTimeline(patientId) {
+export async function getTimeline(patientId, user) {
+  assertResourceAccess(user, patientId);
   return repository.getPatientTimeline(patientId);
 }
 
@@ -28,8 +32,9 @@ export async function updateEntry(id, updates) {
   return repository.updateEntry(id, updates);
 }
 
-export async function getEntry(id) {
+export async function getEntry(id, user) {
   const entry = await repository.getHistoryById(id);
   if (!entry) throw new NotFoundError('Medication history entry', id);
+  assertResourceAccess(user, entry.patient_id);
   return entry;
 }

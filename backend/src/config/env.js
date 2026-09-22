@@ -38,8 +38,9 @@ function parseConnectionUrl(url) {
 
 function resolveDatabaseConfig() {
   const url = optional('DATABASE_URL', optional('POSTGRES_URL', ''));
+  const useUrl = trueish(process.env.DB_USE_URL);
 
-  if (url) {
+  if (url && useUrl !== false) {
     const parsed = parseConnectionUrl(url);
     const sslOverride = trueish(process.env.DB_SSL);
     return {
@@ -111,6 +112,20 @@ export const env = {
   },
   SMS_PROVIDER: optional('SMS_PROVIDER', 'development'),
   PAYMENT_PROVIDER: optional('PAYMENT_PROVIDER', 'development'),
+  PAYMENT_CURRENCY: optional('PAYMENT_CURRENCY', 'RWF'),
+  PAYMENT_WEBHOOK_SECRET: optional('PAYMENT_WEBHOOK_SECRET', ''),
+  PAYMENT_SANDBOX_DELAY_MS: numeric('PAYMENT_SANDBOX_DELAY_MS', 5000),
+  PAYMENT_MTN_MOMO_HOST: optional('PAYMENT_MTN_MOMO_HOST', ''),
+  PAYMENT_MTN_MOMO_ENVIRONMENT: optional('PAYMENT_MTN_MOMO_ENVIRONMENT', 'sandbox'),
+  PAYMENT_MTN_MOMO_SUBSCRIPTION_KEY: optional('PAYMENT_MTN_MOMO_SUBSCRIPTION_KEY', ''),
+  PAYMENT_MTN_MOMO_API_USER: optional('PAYMENT_MTN_MOMO_API_USER', ''),
+  PAYMENT_MTN_MOMO_API_KEY: optional('PAYMENT_MTN_MOMO_API_KEY', ''),
+  PAYMENT_AIRTEL_HOST: optional('PAYMENT_AIRTEL_HOST', ''),
+  PAYMENT_AIRTEL_APP_ID: optional('PAYMENT_AIRTEL_APP_ID', ''),
+  PAYMENT_AIRTEL_APP_KEY: optional('PAYMENT_AIRTEL_APP_KEY', ''),
+  PAYMENT_AIRTEL_COUNTRY: optional('PAYMENT_AIRTEL_COUNTRY', 'RW'),
+  PAYMENT_CARD_PROCESSING_URL: optional('PAYMENT_CARD_PROCESSING_URL', ''),
+  PAYMENT_CARD_SECRET_KEY: optional('PAYMENT_CARD_SECRET_KEY', ''),
   ORDER_SIGNING_SECRET: optional('ORDER_SIGNING_SECRET', optional('JWT_SECRET', '')),
   RESERVATION_MINUTES: numeric('RESERVATION_MINUTES', 30),
 

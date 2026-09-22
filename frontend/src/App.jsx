@@ -13,7 +13,6 @@ const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'))
 const RegisterPage = lazy(() => import('@/features/auth/pages/RegisterPage'))
 const ForgotPasswordPage = lazy(() => import('@/features/auth/pages/ForgotPasswordPage'))
 const ResetPasswordPage = lazy(() => import('@/features/auth/pages/ResetPasswordPage'))
-const OtpVerificationPage = lazy(() => import('@/features/auth/pages/OtpVerificationPage'))
 const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'))
 const PrescriptionPages = lazy(() => import('@/features/prescriptions/pages/PrescriptionPages'))
 const InventoryPage = lazy(() => import('@/features/inventory/pages/InventoryPage'))
@@ -40,7 +39,6 @@ const EmailVerificationPage = lazy(() => import('@/features/auth/pages/EmailVeri
 const NotFoundPage = lazy(() => import('@/features/not-found/pages/NotFoundPage'))
 
 const PatientRegisterPage = lazy(() => import('@/features/patient/pages/PatientRegisterPage'))
-const PatientDashboard = lazy(() => import('@/features/patient/pages/PatientDashboard'))
 const MessagesPage = lazy(() => import('@/features/patient/pages/MessagesPage'))
 const PrescriptionsPage = lazy(() => import('@/features/patient/pages/PrescriptionsPage'))
 const MedicinesPage = lazy(() => import('@/features/patient/pages/MedicinesPage'))
@@ -121,7 +119,6 @@ export default function App() {
         <Route path="/accept-invite" element={<AcceptInvitationPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/verify-otp" element={<OtpVerificationPage />} />
         <Route path="/verify-email" element={<EmailVerificationPage />} />
         <Route path="/" element={<LandingPage />} />
         <Route path="/about" element={<AboutPage />} />
@@ -145,7 +142,7 @@ export default function App() {
             </PatientProtectedRoute>
           }
         >
-          <Route index element={<PatientDashboard />} />
+          <Route index element={<Navigate to="profile" replace />} />
           <Route path="messages" element={<MessagesPage />} />
           <Route path="messages/:id" element={<MessagesPage />} />
           <Route path="prescriptions" element={<PrescriptionsPage />} />

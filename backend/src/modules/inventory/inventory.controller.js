@@ -3,7 +3,10 @@ import { sendSuccess, sendCreated } from '../../utils/response.js';
 
 function publicMedicine(medicine) {
   const safe = { ...medicine };
-  for (const key of ['costPrice', 'currentStock', 'quantity', 'minStockLevel', 'maxStockLevel', 'reorderPoint', 'barcode']) {
+  for (const key of [
+    'costPrice', 'currentStock', 'quantity', 'minStockLevel', 'maxStockLevel', 'reorderPoint', 'barcode',
+    'cost_price', 'current_stock', 'min_stock_level', 'max_stock_level', 'reorder_point',
+  ]) {
     delete safe[key];
   }
   return safe;

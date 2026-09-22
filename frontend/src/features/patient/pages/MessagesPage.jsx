@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Loader2, Plus } from 'lucide-react'
@@ -11,6 +11,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { MessagingShell, ListHeader, ConversationRow, ConversationSkeletons, EmptyList, EmptyChat } from '@/components/chat/ChatUI'
 import ChatPage from './ChatPage'
+import { AvailabilityRequestDialog } from '@/components/availability/AskPharmacistButton'
+import { getAvailabilityDraft } from '@/lib/availability'
 
 function NewConversationDialog({ open, onOpenChange }) {
   const qc = useQueryClient(); const navigate = useNavigate()
@@ -22,8 +24,10 @@ function NewConversationDialog({ open, onOpenChange }) {
 
 export default function MessagesPage() {
   const { id }=useParams(); const navigate=useNavigate(); const [search,setSearch]=useState(''); const [open,setOpen]=useState(false)
-  const query=useQuery({queryKey:['patient-conversations'],queryFn:()=>api.get('/chat/conversations?limit=50').then(r=>r.data),refetchInterval:10000})
+  const [draft,setDraft]=useState(null)
+  useEffect(()=>{ const d=getAvailabilityDraft(); if(d){ setDraft(d); setOpen(true) } },[])
+  const query=useQuery({queryKey:['patient-conversations'],queryFn:()=>api.get('/chat/conversations?limit=50').then(r=>r.data),refetchInterval:3000})
   const conversations=query.data?.data||[]; const needle=search.toLowerCase(); const filtered=conversations.filter(c=>`${c.subject} ${c.lastMessage} ${c.pharmacistName}`.toLowerCase().includes(needle))
   const list=<><ListHeader title="Messages" subtitle="Your Urumuli pharmacy care team" search={search} onSearch={setSearch} action={<Button size="icon" onClick={()=>setOpen(true)} className="h-10 w-10 rounded-xl shadow-md shadow-foreground/10"><Plus className="h-5 w-5"/></Button>}/><div className="flex-1 overflow-y-auto">{query.isLoading?<ConversationSkeletons/>:filtered.length?filtered.map(c=><ConversationRow key={c.id} conversation={c} selected={c.id===id} onClick={()=>navigate(`/patient/messages/${c.id}`)}/>):<EmptyList search={search}/>}</div><button onClick={()=>setOpen(true)} className="m-4 rounded-2xl border border-dashed bg-muted/60 px-4 py-3 text-xs font-semibold text-foreground transition hover:bg-accent"><Plus className="mr-1 inline h-4 w-4"/> Start a new conversation</button></>
-  return <><MessagingShell list={list} hasSelection={!!id}>{id?<ChatPage conversationId={id} onBack={()=>navigate('/patient/messages')}/>:<EmptyChat patient/>}</MessagingShell><NewConversationDialog open={open} onOpenChange={setOpen}/></>
+  return <><MessagingShell list={list} hasSelection={!!id}>{id?<ChatPage conversationId={id} onBack={()=>navigate('/patient/messages')}/>:<EmptyChat patient/>}</MessagingShell><NewConversationDialog open={open} onOpenChange={setOpen}/>{draft&&<AvailabilityRequestDialog open={open} onOpenChange={(v)=>{setOpen(v); if(!v)setDraft(null)}} medicineId={draft.medicineId} medicineName={draft.medicineName} message={draft.message||''}/>}</>
 }
