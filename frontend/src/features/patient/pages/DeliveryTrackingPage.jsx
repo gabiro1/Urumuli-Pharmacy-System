@@ -23,6 +23,7 @@ export default function DeliveryTrackingPage() {
   const { data: orders } = useQuery({
     queryKey: ['patient-orders'],
     queryFn: async () => { const r = await api.get('/orders/my'); return r.data.data; },
+    refetchInterval: 5000,
   });
 
   const ordersWithDelivery = (orders || []).filter(o => ['OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'COMPLETED'].includes(o.status));

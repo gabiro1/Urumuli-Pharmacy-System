@@ -35,7 +35,7 @@ Every module follows `repository → service → controller → routes`. No empt
 Public shop (landing, catalog, cart, checkout, order tracking), auth, a full **patient portal** (dashboard, messages, prescriptions, orders, refills, delivery, consent, settings), and a staff app (POS, inventory, prescriptions, analytics, search, drug checker, audit, admin, controlled-substances, transfers, telehealth, regulatory reports).
 
 ### Tests, CI, Env
-- **174 unit tests** (`node --test`) across orderState, pharmacyManagement, professionalVerification, totp, resourceAccess (PHI ownership), serializers
+- **181 unit tests** (`node --test`) across orderState + orderFulfilment, pharmacyManagement, professionalVerification, totp, resourceAccess (PHI ownership), serializers
 - **E2E smoke script** exists (`backend/scripts/e2e-smoke.mjs`) — now wired as `npm run e2e:smoke` (needs a dev DB running)
 - **CI added**: `.github/workflows/ci.yml` (backend lint+test; frontend lint+build; public-site build; analytics-service syntax) on push/PR to `main`
 - **Env templates**: all four services now have `.env.example` (backend includes full payment-provider + webhook secret + retention vars)
@@ -97,6 +97,18 @@ Implements the top recommendations from §5 below (wire barcode, real SMS provid
 4. **Data protection (Rwanda data-protection readiness)** — document access is audited (`AUDIT_ACTION.READ` on orders + prescription files, `requirements.ts`-style `ENTITY.ORDER`/`ENTITY.PRESCRIPTION_FILE`); `GET /auth/patient/data-export` returns all PHI for a patient (16 tables, JSON envelope); `DELETE /auth/patient/account` transactionally anonymizes/erases the account (identity, profile, settings, cart, notifications, conversations, prescriptions) and writes a `DELETE` audit record. Both endpoints are PATIENT-only and logged.
 5. **Public-site field contract fix** — `mapMedicine` now emits snake_case aliases (`generic_name`, `brand_name`, `dosage_form`, `requires_prescription`, `category`, …) consumed by the public-site SEO pages; `publicMedicine` strips every internal/stock/cost field before leaving the API.
 6. **CI & JS quality gates** — frontend now has `eslint` (permissive flat config) wired as `npm run lint`; CI runs frontend lint, public-site build, and analytics-service syntax check in addition to the backend job.
+
+---
+
+## 3d. Paid-but-Not-Received Workflow: Payment ↔ Fulfilment Split (this session)
+
+Resolves the "patient paid, pharmacy not told to prepare / no handover record" gap by tracking **money and medicines independently** on every order:
+
+1. **Schema** (migration `026_order_fulfilment_split.sql`) — adds `fulfilment_status` to `orders` plus timeline timestamps `paid_at`, `preparing_at`, `ready_at`, `dispensed_at`, `delivered_at`, `fulfilled_at`, `cancelled_at`. Safe backfill from existing `status`: paid orders → `AWAITING_DISPENSING`, `COMPLETED` → `DISPENSED`/`DELIVERED` by `fulfilment_method`, terminated → `CANCELLED`. No data loss; `payment_status` additionally supports `REFUNDED`/`PARTIALLY_REFUNDED`.
+2. **State machine** — `orderState.js` gains a `FULFILMENT_STATUS` enum and `fulfilmentForStatus(status, fulfilmentMethod)`: `PAYMENT_RECEIVED`/`PAYMENT_DEFERRED` → `AWAITING_DISPENSING`, then `PREPARING` → `READY_FOR_PICKUP` or `OUT_FOR_DELIVERY` → `DISPENSED` (pickup) or `DELIVERED` (delivery) at `COMPLETED`; terminated → `CANCELLED`; nothing before payment.
+3. **Backend enforcement** — `transitionOrder` derives fulfilment stage + the correct timestamp per transition and writes them in the same transaction; `REFUNDED` records `payment_status='REFUNDED'`; `confirmPayment` stamps `paid_at` (idempotent, `COALESCE`), and deferred pickup sets `fulfilment_status='AWAITING_DISPENSING'`. `getPaymentSummary` now exposes `paymentStatus`, `fulfilmentStatus`, `fulfilmentMethod`, `paidAt`. The pharmacy queue (`listQueue`) can filter by `fulfilmentStatus` and prioritizes fulfilment-active orders. Full audit trail (CREATE/UPDATE ORDER events with prev→new status + reason). Inventory is still reserved at order time and **deducted exactly once at COMPLETED**.
+4. **Frontend** — patient `OrderTrackingPage` polls every 5s and shows a milestone timeline (placed → paid → preparing → ready/delivery → collected) plus payment/fulfilment/method badges; patient `OrdersPage` rows carry payment + fulfilment chips; pharmacist `OrderQueuePage` gets a "Paid · Awaiting dispensing" quick filter and per-row payment/fulfilment badges (15s auto-refresh); `OrderReviewPage` header shows payment + fulfilment + status; `DeliveryTrackingPage` polls every 5s.
+5. **Tests** — `test/orderFulfilment.test.js` (7 cases): independent PAID/AWAITING_DISPENSING, pickup vs delivery handover, null before payment, terminated → CANCELLED, refund reachability, no skip-to-prepare. 181 backend tests green; backend lint, frontend lint/build, public-site build all green.
 
 ---
 

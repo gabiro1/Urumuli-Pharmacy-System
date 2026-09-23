@@ -40,9 +40,10 @@ export const listOwnedOrders = (identityId) => query(
   `SELECT o.*, COUNT(oi.id)::int item_count FROM orders o LEFT JOIN order_items oi ON oi.order_id=o.id
    WHERE o.patient_identity_id=$1 GROUP BY o.id ORDER BY o.created_at DESC`, [identityId]
 );
-export const listQueue = ({ status, search, limit = 50 }) => {
+export const listQueue = ({ status, search, fulfilmentStatus, limit = 50 }) => {
   const params=[]; const conditions=[];
   if(status){params.push(status);conditions.push(`o.status=$${params.length}`)}
+  if(fulfilmentStatus){params.push(fulfilmentStatus);conditions.push(`o.fulfilment_status=$${params.length}`)}
   if(search){params.push(`%${search}%`);conditions.push(`(o.public_reference ILIKE $${params.length} OR pi.full_name ILIKE $${params.length} OR pi.verified_phone ILIKE $${params.length})`)}
   params.push(Math.min(Number(limit)||50,100));
   return query(`SELECT o.*,pi.full_name patient_name,pi.verified_phone patient_phone,COUNT(oi.id)::int item_count
@@ -52,12 +53,38 @@ export const listQueue = ({ status, search, limit = 50 }) => {
       WHEN 'SUBMITTED_FOR_REVIEW' THEN 0
       WHEN 'UNDER_PHARMACIST_REVIEW' THEN 1
       WHEN 'CLARIFICATION_REQUIRED' THEN 2
-      ELSE 3 END,
+      WHEN 'PAYMENT_RECEIVED' THEN 3
+      WHEN 'PAYMENT_DEFERRED' THEN 3
+      WHEN 'PREPARING' THEN 4
+      WHEN 'READY_FOR_PICKUP' THEN 5
+      WHEN 'OUT_FOR_DELIVERY' THEN 5
+      ELSE 6 END,
       o.created_at DESC LIMIT $${params.length}`,params);
 };
-export const updateOrderStatus = (client, id, status, pharmacistId = null) => client.query(
-  `UPDATE orders SET status=$1,assigned_pharmacist_id=COALESCE($2,assigned_pharmacist_id) WHERE id=$3 RETURNING *`, [status,pharmacistId,id]
-).then(r=>r.rows[0]);
+export const updateOrderStatus = (client, id, status, pharmacistId = null, fulfilment = {}) => {
+  const set = ['status=$1'];
+  const params = [status];
+  if (pharmacistId) { set.push(`assigned_pharmacist_id=$${String(params.length + 1)}`); params.push(pharmacistId); }
+  const columns = {
+    fulfilmentStatus: 'fulfilment_status',
+    paymentStatus: 'payment_status',
+    paidAt: 'paid_at',
+    preparingAt: 'preparing_at',
+    readyAt: 'ready_at',
+    dispensedAt: 'dispensed_at',
+    deliveredAt: 'delivered_at',
+    fulfilledAt: 'fulfilled_at',
+    cancelledAt: 'cancelled_at',
+  };
+  for (const [key, column] of Object.entries(columns)) {
+    if (fulfilment[key] === undefined || fulfilment[key] === null) continue;
+    set.push(`${column}=$${String(params.length + 1)}`);
+    params.push(fulfilment[key]);
+  }
+  params.push(id);
+  set.push('updated_at=NOW()');
+  return client.query(`UPDATE orders SET ${set.join(', ')} WHERE id=$${String(params.length)} RETURNING *`, params).then(r => r.rows[0]);
+};
 export const addHistory = (client, data) => client.query(
   `INSERT INTO order_status_history(order_id,previous_status,new_status,actor_id,actor_role,reason,internal_note,metadata)
    VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,

@@ -7,10 +7,25 @@ import { registerScheduledWorkers } from './workers/scheduled.js';
 
 let server;
 
+const DB_RETRY_ATTEMPTS = 6;
+const DB_RETRY_DELAY_MS = 10000;
+
+async function waitForDatabase() {
+  for (let attempt = 1; attempt <= DB_RETRY_ATTEMPTS; attempt += 1) {
+    const healthy = await healthCheck();
+    if (healthy) return true;
+    console.error(`Database health check failed (attempt ${attempt}/${DB_RETRY_ATTEMPTS}); retrying in ${DB_RETRY_DELAY_MS / 1000}s...`);
+    if (attempt < DB_RETRY_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, DB_RETRY_DELAY_MS));
+    }
+  }
+  return false;
+}
+
 async function initializeServices() {
-  const dbHealthy = await healthCheck();
+  const dbHealthy = await waitForDatabase();
   if (!dbHealthy) {
-    console.error('Database connection failed. Exiting.');
+    console.error('Database connection failed after retries. Exiting.');
     process.exit(1);
   }
   console.log('Database connected successfully');

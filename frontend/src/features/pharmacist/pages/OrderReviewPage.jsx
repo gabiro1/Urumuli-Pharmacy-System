@@ -32,6 +32,9 @@ function apiError(error, fallback) {
   return body?.details?.[0]?.message || body?.error || fallback
 }
 
+const paymentLabel = { PAID: 'Paid', DUE_ON_PICKUP: 'Pay on pickup', PROCESSING: 'Processing', FAILED: 'Failed', NOT_STARTED: 'Pending' }
+const fulfilmentLabel = { AWAITING_DISPENSING: 'Awaiting dispensing', PREPARING: 'Preparing', READY_FOR_PICKUP: 'Ready for pickup', OUT_FOR_DELIVERY: 'Out for delivery', DISPENSED: 'Dispensed', DELIVERED: 'Delivered', FULFILLED: 'Fulfilled', CANCELLED: 'Cancelled' }
+
 export default function OrderReviewPage() {
   const { id } = useParams()
   const qc = useQueryClient()
@@ -106,7 +109,7 @@ export default function OrderReviewPage() {
   if (q.isError) return <div className="p-6">Request could not be loaded.</div>
 
   return <div className="space-y-6">
-    <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm text-muted-foreground">{o.public_reference}</p><h1 className="text-3xl font-bold">Prescription review</h1></div><Badge>{o.status.replaceAll('_', ' ')}</Badge></div>
+    <div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm text-muted-foreground">{o.public_reference}</p><h1 className="text-3xl font-bold">Prescription review</h1></div><div className="flex flex-wrap items-center justify-end gap-2"><Badge variant="secondary">Payment · {paymentLabel[o.payment_status] || o.payment_status}</Badge><Badge variant="outline">{fulfilmentLabel[o.fulfilment_status] || 'Fulfilment not started'}</Badge><Badge>{o.status.replaceAll('_', ' ')}</Badge></div></div>
     <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
       <div className="space-y-5">
         <Card><CardContent className="p-6"><h2 className="font-semibold">Patient and request</h2><div className="mt-4 grid gap-3 text-sm sm:grid-cols-2"><p><span className="text-muted-foreground">Patient:</span> {o.patient_name}</p><p><span className="text-muted-foreground">Verified phone:</span> {o.patient_phone}</p><p><span className="text-muted-foreground">Fulfilment:</span> {o.fulfilment_method}</p><p><span className="text-muted-foreground">Total:</span> RWF {Number(o.total).toLocaleString()}</p></div><div className="mt-5 space-y-2">{o.items.map(item => <button key={item.id} onClick={() => selectItem(item)} className={`w-full rounded-lg border p-4 text-left ${form.orderItemId === item.id ? 'border-primary bg-accent' : ''}`}><b>{item.medicine_snapshot.name}</b><p className="text-sm text-muted-foreground">{item.medicine_snapshot.strength} · Requested {item.requested_quantity} {item.selling_unit}</p></button>)}</div></CardContent></Card>

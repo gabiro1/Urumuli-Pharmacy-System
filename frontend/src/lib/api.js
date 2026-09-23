@@ -1,7 +1,10 @@
 import axios from 'axios'
 
+const REQUEST_TIMEOUT_MS = 20000
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/v1',
+  timeout: REQUEST_TIMEOUT_MS,
 })
 
 let refreshPromise = null
@@ -84,7 +87,8 @@ api.interceptors.response.use(
         if (!refreshPromise) {
           refreshPromise = axios.post(
             `${import.meta.env.VITE_API_URL || '/api/v1'}/auth/refresh-token`,
-            { refreshToken }
+            { refreshToken },
+            { timeout: REQUEST_TIMEOUT_MS }
           ).then(({ data }) => persistRefreshedSession(data.data))
             .finally(() => { refreshPromise = null })
         }

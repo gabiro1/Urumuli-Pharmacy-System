@@ -33,6 +33,9 @@ const needsAction = (status) => [
   'CLARIFICATION_REQUIRED',
 ].includes(status)
 
+const paymentLabel = { PAID: 'Paid', DUE_ON_PICKUP: 'Pay on pickup', PROCESSING: 'Processing', FAILED: 'Failed', NOT_STARTED: 'Pending' }
+const fulfilmentLabel = { AWAITING_DISPENSING: 'Awaiting dispensing', PREPARING: 'Preparing', READY_FOR_PICKUP: 'Ready for pickup', OUT_FOR_DELIVERY: 'Out for delivery', DISPENSED: 'Dispensed', DELIVERED: 'Delivered', FULFILLED: 'Fulfilled', CANCELLED: 'Cancelled' }
+
 function OrderIcon({ status }) {
   const Icon = status === 'COMPLETED' ? CheckCircle2 : needsAction(status) ? PackageCheck : Clock3
   const tone = status === 'COMPLETED'
@@ -109,6 +112,10 @@ export default function OrdersPage() {
                     <Badge variant={needsAction(order.status) ? 'default' : 'secondary'} className="shrink-0 text-[10px] sm:text-xs">
                       {statusLabel[order.status] || order.status?.replaceAll('_', ' ')}
                     </Badge>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge variant="secondary" className="text-[10px]">Payment · {paymentLabel[order.payment_status] || order.payment_status || 'Pending'}</Badge>
+                    <Badge variant={order.fulfilment_status === 'AWAITING_DISPENSING' ? 'default' : 'secondary'} className="text-[10px]">Fulfilment · {fulfilmentLabel[order.fulfilment_status] || 'Not started'}</Badge>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/60 pt-3 sm:grid-cols-3">
                     <div><p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Items</p><p className="mt-1 text-xs font-semibold">{order.item_count} medicine{Number(order.item_count) === 1 ? '' : 's'}</p></div>

@@ -3,10 +3,11 @@ import path from 'path';
 import fs from 'fs/promises';
 import { transaction, query } from '../../config/database.js';
 import { env } from '../../config/env.js';
-import { ORDER_STATUS } from '../../constants.js';
+import { ORDER_STATUS, AUDIT_ACTION, AUDIT_ENTITY } from '../../constants.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../utils/errors.js';
+import { createAuditLog } from '../../middlewares/auditLogger.js';
 import * as repo from './orders.repository.js';
-import { canTransition, instructionErrors, orderTransitions } from './orderState.js';
+import { canTransition, fulfilmentForStatus, instructionErrors, orderTransitions } from './orderState.js';
 import { notifyOrderPatient } from '../../services/notification.service.js';
 import {
   initiatePayment,
@@ -18,6 +19,27 @@ import { isProviderConfigured } from '../payments/payment.providers.js';
 
 const normalizePhone = (phone) => phone.replace(/[\s()-]/g,'');
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
+
+/**
+ * Derive the fulfilment side of an order transition: the fulfilment stage and
+ * the timeline timestamps that fire when that stage is reached. Only the fields
+ * relevant to `target` are returned; null/undefined values are ignored by the
+ * repository so unrelated timestamps are never touched.
+ */
+function fulfilmentFor(target, fulfilmentMethod) {
+  const fields = {};
+  const fulfilmentStatus = fulfilmentForStatus(target, fulfilmentMethod);
+  if (fulfilmentStatus) fields.fulfilmentStatus = fulfilmentStatus;
+  if (target === 'PREPARING') fields.preparingAt = new Date();
+  if (target === 'READY_FOR_PICKUP' || target === 'OUT_FOR_DELIVERY') fields.readyAt = new Date();
+  if (target === 'COMPLETED') {
+    fields.fulfilledAt = new Date();
+    if (fulfilmentMethod === 'DELIVERY') fields.deliveredAt = new Date();
+    else fields.dispensedAt = new Date();
+  }
+  if (['CANCELLED', 'REJECTED_BY_PHARMACIST', 'REFUNDED'].includes(target)) fields.cancelledAt = new Date();
+  return fields;
+}
 
 const assertOwner = async (order,user) => {
   const staff=['ADMIN','MANAGER','PHARMACIST','AUDITOR'].includes(user.role);
@@ -73,13 +95,24 @@ export async function createOrder(data,user,idempotencyKey){
 }
 
 export async function transitionOrder(id,target,user,{reason,internalNote}={}){
-  return transaction(async(client)=>{const locked=(await client.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!locked)throw new NotFoundError('Order',id);if(!canTransition(locked.status,target))throw new ValidationError(`Transition from ${locked.status} to ${target} is not permitted`);
+  let previousStatus=null;
+  return transaction(async(client)=>{const locked=(await client.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!locked)throw new NotFoundError('Order',id);if(!canTransition(locked.status,target))throw new ValidationError(`Transition from ${locked.status} to ${target} is not permitted`);previousStatus=locked.status;
     const reasonRequired=['CLARIFICATION_REQUIRED','PRESCRIBER_CLARIFICATION_REQUIRED','REJECTED_BY_PHARMACIST','CANCELLED'].includes(target);if(reasonRequired&&!reason?.trim())throw new ValidationError('A reason is required for this decision');
     if(target==='APPROVED_AWAITING_PATIENT_CONFIRMATION'){const file=(await client.query(`SELECT pf.id FROM prescription_files pf JOIN prescriptions p ON p.id=pf.prescription_id WHERE p.order_id=$1 LIMIT 1`,[id])).rows[0];if(!file)throw new ValidationError('The original prescription must be available before approval');const missing=(await client.query(`SELECT oi.id FROM order_items oi LEFT JOIN medication_instructions mi ON mi.order_item_id=oi.id AND mi.status='VERIFIED' WHERE oi.order_id=$1 AND oi.prescription_required=true AND mi.id IS NULL`,[id])).rows;if(missing.length)throw new ValidationError('Every prescription medicine requires verified directions before approval');const items=(await client.query('SELECT * FROM order_items WHERE order_id=$1 FOR UPDATE',[id])).rows;for(const item of items){const med=(await client.query('SELECT name,current_stock FROM medicines WHERE id=$1 FOR UPDATE',[item.medicine_id])).rows[0];const reserved=(await client.query(`SELECT COALESCE(SUM(quantity),0)::int total FROM inventory_reservations WHERE medicine_id=$1 AND status='ACTIVE' AND expires_at>NOW()`,[item.medicine_id])).rows[0].total;if(med.current_stock-reserved<item.requested_quantity)throw new ValidationError(`${med.name} is unavailable in the requested quantity`);await client.query(`UPDATE order_items SET approved_quantity=requested_quantity,approval_status='APPROVED' WHERE id=$1`,[item.id]);await client.query(`INSERT INTO inventory_reservations(order_item_id,medicine_id,quantity,expires_at) VALUES($1,$2,$3,NOW()+($4||' minutes')::interval) ON CONFLICT(order_item_id) DO UPDATE SET quantity=EXCLUDED.quantity,status='ACTIVE',expires_at=EXCLUDED.expires_at,released_at=NULL`,[item.id,item.medicine_id,item.requested_quantity,env.RESERVATION_MINUTES]);}}
     if(['CANCELLED','REJECTED_BY_PHARMACIST','REFUNDED'].includes(target))await client.query(`UPDATE inventory_reservations SET status='RELEASED',released_at=NOW() WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id=$1) AND status='ACTIVE'`,[id]);
     if(target==='COMPLETED'){const reservations=(await client.query(`SELECT ir.*,m.current_stock FROM inventory_reservations ir JOIN medicines m ON m.id=ir.medicine_id WHERE ir.order_item_id IN (SELECT id FROM order_items WHERE order_id=$1) AND ir.status='ACTIVE' FOR UPDATE`,[id])).rows;for(const r of reservations){if(r.current_stock<r.quantity)throw new ValidationError('Inventory changed before fulfilment; completion is blocked');const next=r.current_stock-r.quantity;await client.query('UPDATE medicines SET current_stock=$1 WHERE id=$2',[next,r.medicine_id]);await client.query(`INSERT INTO stock_movements(medicine_id,movement_type,quantity,previous_stock,new_stock,reference_type,reference_id,notes,performed_by) VALUES($1,'OUTBOUND',$2,$3,$4,'ORDER',$5,'Order completion',$6)`,[r.medicine_id,r.quantity,r.current_stock,next,id,user.userId]);await client.query(`UPDATE inventory_reservations SET status='CONSUMED',released_at=NOW() WHERE id=$1`,[r.id]);}}
-    const updated=await repo.updateOrderStatus(client,id,target,['ADMIN','MANAGER','PHARMACIST'].includes(user.role)?user.userId:null);await repo.addHistory(client,{orderId:id,previousStatus:locked.status,newStatus:target,actorId:user.userId,actorRole:user.role,reason,internalNote,metadata:{}});return updated;})
+    const fulfilment = fulfilmentFor(target, locked.fulfilment_method);
+    if (target === 'REFUNDED') fulfilment.paymentStatus = 'REFUNDED';
+    const updated=await repo.updateOrderStatus(client,id,target,['ADMIN','MANAGER','PHARMACIST'].includes(user.role)?user.userId:null,fulfilment);await repo.addHistory(client,{orderId:id,previousStatus:locked.status,newStatus:target,actorId:user.userId,actorRole:user.role,reason,internalNote,metadata:{}});return updated;})
     .then((updated) => {
+    createAuditLog({
+      userId: user.userId,
+      action: AUDIT_ACTION.UPDATE,
+      entity: AUDIT_ENTITY.ORDER,
+      entityId: updated.id,
+      description: `Order status ${previousStatus || updated.status} → ${target}`,
+      metadata: { previousStatus, newStatus: target, reason: reason || null, internalNote: internalNote || null },
+    }).catch(console.error);
     const notificationMap = {
       APPROVED_AWAITING_PATIENT_CONFIRMATION: ['ORDER_STATUS', 'Order approved', 'Your order is approved and waiting for your confirmation.'],
       APPROVED_AWAITING_PAYMENT: ['ORDER_STATUS', 'Order approved', 'Your order is approved. Please proceed to payment.'],
@@ -136,7 +169,7 @@ export async function getPrescriptionFile(fileId,user){const file=await repo.fin
 
 export async function startPayment(orderId,user,idempotencyKey,method){
   const order=await repo.findOrder(orderId);if(!order)throw new NotFoundError('Order',orderId);await assertOwner(order,user);if(order.status!==ORDER_STATUS.APPROVED_AWAITING_PAYMENT)throw new ValidationError('Payment is available only after approval and patient confirmation');if(!idempotencyKey)throw new ValidationError('Idempotency-Key header is required');
-  if(method==='PAY_ON_PICKUP'||method==='CASH'){if(method==='PAY_ON_PICKUP'&&order.fulfilment_method!=='PICKUP')throw new ValidationError('Pay on pickup is available only for pickup orders');return transaction(async(client)=>{const prior=(await client.query(`SELECT response_body FROM idempotency_records WHERE scope='DEFER_PAYMENT' AND idempotency_key=$1 AND owner_key=$2`,[idempotencyKey,order.patient_identity_id])).rows[0];if(prior)return prior.response_body;await client.query(`UPDATE orders SET payment_method=$2,payment_status='DUE_ON_PICKUP',status='PAYMENT_DEFERRED' WHERE id=$1`,[order.id,method]);await repo.addHistory(client,{orderId:order.id,previousStatus:order.status,newStatus:'PAYMENT_DEFERRED',actorId:user.userId,actorRole:user.role,reason:'Patient selected pay at pickup'});const result={status:'PAYMENT_DEFERRED',paymentStatus:'DUE_ON_PICKUP',message:'Payment will be collected at the pharmacy.'};await client.query(`INSERT INTO idempotency_records(scope,idempotency_key,owner_key,response_status,response_body) VALUES('DEFER_PAYMENT',$1,$2,200,$3)`,[idempotencyKey,order.patient_identity_id,result]);return result;});}
+  if(method==='PAY_ON_PICKUP'||method==='CASH'){if(method==='PAY_ON_PICKUP'&&order.fulfilment_method!=='PICKUP')throw new ValidationError('Pay on pickup is available only for pickup orders');return transaction(async(client)=>{const prior=(await client.query(`SELECT response_body FROM idempotency_records WHERE scope='DEFER_PAYMENT' AND idempotency_key=$1 AND owner_key=$2`,[idempotencyKey,order.patient_identity_id])).rows[0];if(prior)return prior.response_body;await client.query(`UPDATE orders SET payment_method=$2,payment_status='DUE_ON_PICKUP',status='PAYMENT_DEFERRED',fulfilment_status='AWAITING_DISPENSING' WHERE id=$1`,[order.id,method]);await repo.addHistory(client,{orderId:order.id,previousStatus:order.status,newStatus:'PAYMENT_DEFERRED',actorId:user.userId,actorRole:user.role,reason:'Patient selected pay at pickup'});const result={status:'PAYMENT_DEFERRED',paymentStatus:'DUE_ON_PICKUP',fulfilmentStatus:'AWAITING_DISPENSING',fulfilmentMethod:order.fulfilment_method,message:'Payment will be collected at the pharmacy.'};await client.query(`INSERT INTO idempotency_records(scope,idempotency_key,owner_key,response_status,response_body) VALUES('DEFER_PAYMENT',$1,$2,200,$3)`,[idempotencyKey,order.patient_identity_id,result]);createAuditLog({userId:user.userId,action:AUDIT_ACTION.UPDATE,entity:AUDIT_ENTITY.ORDER,entityId:order.id,description:'Payment deferred (collect at pharmacy)',metadata:{paymentMethod:method}}).catch(console.error);return result;});}
   if(env.PAYMENT_PROVIDER==='development')return await transaction(async(client)=>{const prior=(await client.query(`SELECT response_body FROM idempotency_records WHERE scope='START_PAYMENT' AND idempotency_key=$1 AND owner_key=$2`,[idempotencyKey,order.patient_identity_id])).rows[0];if(prior)return prior.response_body;const result={status:'NOT_PROCESSED',providerConfigured:false,message:'Card and mobile-money payments are not configured. No charge was attempted.'};await client.query(`INSERT INTO idempotency_records(scope,idempotency_key,owner_key,response_status,response_body) VALUES('START_PAYMENT',$1,$2,200,$3)`,[idempotencyKey,order.patient_identity_id,result]);return result;});
   if(!['CARD','MOBILE_MONEY'].includes(method))throw new ValidationError('Unsupported payment method');
 
@@ -193,9 +226,22 @@ export async function confirmPayment({ orderId, attemptId, result, user = { user
     if (!locked) throw new NotFoundError('Order', orderId);
     // Make the attempt status match the outcome (idempotent).
     await client.query(`UPDATE payment_attempts SET status=$1, updated_at=NOW() WHERE id=$2`, [desired, attemptId]);
-    await client.query(`UPDATE orders SET payment_status=$1 WHERE id=$2`, [desired === 'SUCCEEDED' ? 'PAID' : 'FAILED', orderId]);
+    const paymentStatus = desired === 'SUCCEEDED' ? 'PAID' : 'FAILED';
+    await client.query(
+      `UPDATE orders SET payment_status=$1,
+         paid_at=CASE WHEN $1='PAID' THEN COALESCE(paid_at,NOW()) ELSE paid_at END
+       WHERE id=$2`,
+      [paymentStatus, orderId]);
     return { order: locked };
   });
+  createAuditLog({
+    userId: user.userId,
+    action: AUDIT_ACTION.UPDATE,
+    entity: AUDIT_ENTITY.ORDER,
+    entityId: orderId,
+    description: desired === 'SUCCEEDED' ? 'Payment confirmed' : 'Payment failed',
+    metadata: { attemptId, provider: attempt.provider, status: desired },
+  }).catch(console.error);
 
   if (order.status === ORDER_STATUS.PAYMENT_PROCESSING) {
     const target = desired === 'SUCCEEDED' ? ORDER_STATUS.PAYMENT_RECEIVED : ORDER_STATUS.APPROVED_AWAITING_PAYMENT;
@@ -231,6 +277,9 @@ export async function getPaymentSummary(orderId, user) {
     status: order.status,
     paymentStatus: order.payment_status,
     paymentMethod: order.payment_method,
+    fulfilmentStatus: order.fulfilment_status,
+    fulfilmentMethod: order.fulfilment_method,
+    paidAt: order.paid_at,
     total: order.total,
     currency: order.currency,
     attempts,

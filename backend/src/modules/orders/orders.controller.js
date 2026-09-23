@@ -5,7 +5,7 @@ import { ValidationError } from '../../utils/errors.js';
 import { createAuditLog } from '../../middlewares/auditLogger.js';
 import { AUDIT_ACTION, AUDIT_ENTITY } from '../../constants.js';
 
-export async function createOrder(req,res,next){try{return sendCreated(res,await service.createOrder(req.body,req.user,req.get('Idempotency-Key')),'Order created');}catch(e){next(e)}}
+export async function createOrder(req,res,next){try{const order=await service.createOrder(req.body,req.user,req.get('Idempotency-Key'));createAuditLog({userId:req.user?.userId,action:AUDIT_ACTION.CREATE,entity:AUDIT_ENTITY.ORDER,entityId:order.id,description:`Order created (${order.order_type}, ${order.total} ${order.currency})`,ipAddress:req.ip,userAgent:req.get('User-Agent')}).catch(console.error);return sendCreated(res,order,'Order created');}catch(e){next(e)}}
 export async function getOrder(req,res,next){try{return sendSuccess(res,await service.getOrder(req.params.id,req.user));}catch(e){next(e)}}
 export async function myOrders(req,res,next){try{return sendSuccess(res,await service.listMyOrders(req.user));}catch(e){next(e)}}
 export async function queue(req,res,next){try{return sendSuccess(res,await service.listQueue(req.query));}catch(e){next(e)}}
