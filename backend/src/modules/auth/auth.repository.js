@@ -261,18 +261,35 @@ export async function resetPassword(id, passwordHash) {
   );
 }
 
-export async function listUsers({ page = 1, limit = 20, role, isActive }) {
+export async function listUsers({ page = 1, limit = 20, role, isActive, search }) {
   const conditions = [];
   const params = [];
   let idx = 1;
 
   if (role) {
-    conditions.push(`role = $${idx++}`);
-    params.push(role);
+    const roles = String(role).split(',').map((r) => r.trim()).filter(Boolean);
+    if (roles.length === 1) {
+      conditions.push(`role = $${idx++}`);
+      params.push(roles[0]);
+    } else if (roles.length > 1) {
+      conditions.push(`role = ANY($${idx++})`);
+      params.push(roles);
+    }
   }
   if (isActive !== undefined) {
     conditions.push(`is_active = $${idx++}`);
     params.push(isActive);
+  }
+  if (search) {
+    conditions.push(`(
+      first_name ILIKE $${idx}
+      OR last_name ILIKE $${idx}
+      OR email ILIKE $${idx}
+      OR COALESCE(phone, '') ILIKE $${idx}
+      OR role ILIKE $${idx}
+    )`);
+    params.push(`%${search}%`);
+    idx++;
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -304,7 +321,88 @@ export async function listUsers({ page = 1, limit = 20, role, isActive }) {
 }
 
 export async function listRoles() {
-  return query(`SELECT name, description FROM roles ORDER BY name`);
+  return query(`SELECT name, description FROM roles ORDER BY is_system DESC, name ASC`);
+}
+
+export async function listRolesDetailed() {
+  const rows = await query(
+    `SELECT r.name,
+            r.description,
+            r.is_system,
+            r.created_at,
+            r.updated_at,
+            COALESCE(
+              (SELECT jsonb_agg(rp.permission ORDER BY rp.permission)
+               FROM role_permissions rp WHERE rp.role = r.name),
+              '[]'::jsonb
+            ) AS permissions,
+            (SELECT COUNT(*) FROM users u WHERE u.role = r.name) AS user_count
+     FROM roles r
+     ORDER BY r.is_system DESC, r.name ASC`
+  );
+  return rows.map((role) => ({
+    name: role.name,
+    description: role.description,
+    isSystem: role.is_system,
+    userCount: parseInt(role.user_count, 10),
+    permissions: role.permissions || [],
+    ...(role.created_at ? { createdAt: role.created_at } : {}),
+    ...(role.updated_at ? { updatedAt: role.updated_at } : {}),
+  }));
+}
+
+export async function findRole(name) {
+  return queryOne(
+    `SELECT name, description, is_system, permissions
+     FROM roles WHERE name = $1`,
+    [name]
+  );
+}
+
+export async function getRolePermissions(role) {
+  return query(`SELECT permission FROM role_permissions WHERE role = $1 ORDER BY permission`, [role]);
+}
+
+export async function countUsersByRole(role) {
+  const result = await queryOne(`SELECT COUNT(*) AS total FROM users WHERE role = $1`, [role]);
+  return parseInt(result.total, 10);
+}
+
+export async function createRole({ name, description, permissions }) {
+  const role = await queryOne(
+    `INSERT INTO roles (name, description, permissions, is_system)
+     VALUES ($1, $2, $3, false)
+     RETURNING name, description, is_system, created_at, updated_at`,
+    [name, description || null, '[]']
+  );
+  await replaceRolePermissions(name, permissions || []);
+  return role;
+}
+
+export async function updateRoleInfo(name, description) {
+  return queryOne(
+    `UPDATE roles SET description = $2, updated_at = NOW() WHERE name = $1
+     RETURNING name, description, is_system, updated_at`,
+    [name, description ?? null]
+  );
+}
+
+export async function replaceRolePermissions(role, permissions) {
+  await query(`DELETE FROM role_permissions WHERE role = $1`, [role]);
+  for (const permission of permissions) {
+    await query(
+      `INSERT INTO role_permissions (role, permission) VALUES ($1, $2)
+       ON CONFLICT (role, permission) DO NOTHING`,
+      [role, permission]
+    );
+  }
+}
+
+export async function deleteRole(name) {
+  await transaction(async (client) => {
+    await client.query(`DELETE FROM role_permissions WHERE role = $1`, [name]);
+    await client.query(`DELETE FROM roles WHERE name = $1`, [name]);
+  });
 }
 
 export async function updateRole(id, role) {
@@ -319,6 +417,15 @@ export async function updateActiveStatus(id, isActive) {
     `UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2 RETURNING ${userFields}`,
     [isActive, id]
   );
+}
+
+export async function deleteUser(id) {
+  return transaction(async (client) => {
+    const user = (await client.query(`SELECT ${userFields} FROM users WHERE id = $1`, [id])).rows[0];
+    if (!user) return null;
+    await client.query(`DELETE FROM users WHERE id = $1`, [id]);
+    return user;
+  });
 }
 
 const invitationFields = `

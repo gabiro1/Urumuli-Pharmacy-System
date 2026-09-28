@@ -57,3 +57,12 @@ export const deletePartner = async (req, res, next) => {
     next(err);
   }
 };
+
+export const uploadLogo = async (req, res, next) => {
+  try {
+    const result = await partnersService.uploadPartnerLogo(req.file);
+    sendSuccess(res, result, 'Partner logo uploaded successfully');
+  } catch (err) {
+    next(err);
+  }
+};

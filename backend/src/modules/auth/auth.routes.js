@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import * as authController from './auth.controller.js';
 import { authenticate } from '../../middlewares/authenticate.js';
-import { authorize } from '../../middlewares/authorize.js';
+import { authorize, authorizeAccess } from '../../middlewares/authorize.js';
 import { validate } from '../../middlewares/validate.js';
 import { authLimiter } from '../../middlewares/rateLimiter.js';
 import {
@@ -24,6 +24,8 @@ import {
   verifyTwoFactorSetupSchema,
   googleSignInSchema,
   verifyEmailSchema,
+  createRoleSchema,
+  updateRoleSchema,
 } from './auth.validation.js';
 import { ROLES } from '../../constants.js';
 
@@ -61,15 +63,20 @@ router.put('/patient/settings', authenticate, authorize(ROLES.PATIENT), validate
 router.get('/patient/data-export', authenticate, authorize(ROLES.PATIENT), authController.exportPatientData);
 // Right to erasure (GDPR art. 17): anonymizes identity and strips PHI fields.
 router.delete('/patient/account', authenticate, authorize(ROLES.PATIENT), authController.deletePatientAccount);
-router.get('/users', authenticate, authorize(ROLES.ADMIN, ROLES.AUDITOR), authController.listUsers);
+router.get('/users', authenticate, authorizeAccess({ roles: [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.AUDITOR], permissions: ['team:view'] }), authController.listUsers);
+// Public role catalog (name / description / permissions). Used by the Roles manager UI.
 router.get('/roles', authController.listRoles);
-router.post('/users', authenticate, authorize(ROLES.ADMIN, ROLES.MANAGER), validate(createUserSchema), authController.createUser);
-router.patch('/users/:id/role', authenticate, authorize(ROLES.ADMIN, ROLES.MANAGER), validate(updateUserRoleSchema), authController.updateUserRole);
-router.patch('/users/:id/status', authenticate, authorize(ROLES.ADMIN), validate(updateUserStatusSchema), authController.updateUserActiveStatus);
-router.get('/invitations', authenticate, authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN), authController.listInvitations);
-router.post('/invitations', authenticate, authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN), validate(inviteStaffSchema), authController.createInvitation);
+router.post('/roles', authenticate, authorizeAccess({ roles: [ROLES.ADMIN, ROLES.SUPER_ADMIN], permissions: ['role:manage'] }), validate(createRoleSchema), authController.createRole);
+router.patch('/roles/:name', authenticate, authorizeAccess({ roles: [ROLES.ADMIN, ROLES.SUPER_ADMIN], permissions: ['role:manage'] }), validate(updateRoleSchema), authController.updateRole);
+router.delete('/roles/:name', authenticate, authorizeAccess({ roles: [ROLES.ADMIN, ROLES.SUPER_ADMIN], permissions: ['role:manage'] }), authController.deleteRole);
+router.post('/users', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.MANAGER], permissions: ['team:manage'] }), validate(createUserSchema), authController.createUser);
+router.patch('/users/:id/role', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.MANAGER], permissions: ['team:manage'] }), validate(updateUserRoleSchema), authController.updateUserRole);
+router.patch('/users/:id/status', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN], permissions: ['team:manage'] }), validate(updateUserStatusSchema), authController.updateUserActiveStatus);
+  router.delete('/users/:id', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN], permissions: ['team:manage'] }), authController.deleteUser);
+router.get('/invitations', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN], permissions: ['team:invite'] }), authController.listInvitations);
+router.post('/invitations', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN], permissions: ['team:invite'] }), validate(inviteStaffSchema), authController.createInvitation);
 router.post('/invitations/accept', authLimiter, validate(acceptInvitationSchema), authController.acceptInvitation);
-router.patch('/invitations/:id/revoke', authenticate, authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN), authController.revokeInvitation);
-router.post('/invitations/:id/resend', authenticate, authorize(ROLES.SUPER_ADMIN, ROLES.ADMIN), authController.resendInvitation);
+router.patch('/invitations/:id/revoke', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN], permissions: ['team:invite'] }), authController.revokeInvitation);
+router.post('/invitations/:id/resend', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN], permissions: ['team:invite'] }), authController.resendInvitation);
 
 export default router;

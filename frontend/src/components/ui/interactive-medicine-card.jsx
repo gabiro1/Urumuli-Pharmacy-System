@@ -20,7 +20,7 @@ function getStockStatus(medicine) {
   return { key: 'in', label: 'In stock', dot: 'bg-emerald-500' }
 }
 
-const MedicineLogoStack = ({ imageUrl, name, size = 'lg' }) => {
+export const MedicineLogoStack = ({ imageUrl, name, size = 'lg' }) => {
   const box = size === 'sm' ? 'h-24 w-24' : 'h-40 w-40'
   const pill = size === 'sm' ? 'h-8 w-8' : 'h-12 w-12'
   return (

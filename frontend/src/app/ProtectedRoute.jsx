@@ -3,8 +3,8 @@ import { useAuthStore } from '@/stores/authStore'
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 
-export function ProtectedRoute({ children, allowedRoles }) {
-  const { isAuthenticated, user, fetchProfile } = useAuthStore()
+export function ProtectedRoute({ children, allowedRoles, allowedPermissions, restrictedRoles }) {
+  const { isAuthenticated, user, fetchProfile, hasAnyPermission } = useAuthStore()
   const location = useLocation()
   const [checking, setChecking] = useState(true)
 
@@ -30,6 +30,14 @@ export function ProtectedRoute({ children, allowedRoles }) {
   }
 
   if (allowedRoles && user && !allowedRoles.includes(user.role) && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+    return <Navigate to="/" replace />
+  }
+
+  if (restrictedRoles && user && user.role !== 'SUPER_ADMIN' && !restrictedRoles.includes(user.role)) {
+    return <Navigate to="/" replace />
+  }
+
+  if (allowedPermissions && user && !hasAnyPermission(allowedPermissions)) {
     return <Navigate to="/" replace />
   }
 

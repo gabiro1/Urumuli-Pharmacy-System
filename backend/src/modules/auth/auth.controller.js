@@ -197,10 +197,13 @@ export async function deletePatientAccount(req, res, next) {
 
 export async function listUsers(req, res, next) {
   try {
-    const { page, limit, role, isActive } = req.query;
+    const { page, limit, role, isActive, search } = req.query;
     const result = await authService.listUsers(
-      parseInt(page) || 1, parseInt(limit) || 20,
-      role, isActive === undefined ? undefined : isActive === 'true'
+      parseInt(page) || 1,
+      Math.min(100, Math.max(1, parseInt(limit) || 20)),
+      role,
+      isActive === undefined ? undefined : isActive === 'true',
+      search
     );
     return sendSuccess(res, result.data, 'Success', 200, result.meta);
   } catch (error) {
@@ -212,6 +215,44 @@ export async function listRoles(req, res, next) {
   try {
     const roles = await authService.getRoles();
     return sendSuccess(res, roles);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createRole(req, res, next) {
+  try {
+    const result = await authService.createRole(req.body, req.user.userId, req.ip, req.get('User-Agent'));
+    return sendCreated(res, result, 'Role created');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateRole(req, res, next) {
+  try {
+    const result = await authService.updateRole(
+      req.params.name,
+      req.body,
+      req.user.userId,
+      req.ip,
+      req.get('User-Agent')
+    );
+    return sendSuccess(res, result, 'Role updated');
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteRole(req, res, next) {
+  try {
+    const result = await authService.deleteRole(
+      req.params.name,
+      req.user.userId,
+      req.ip,
+      req.get('User-Agent')
+    );
+    return sendSuccess(res, result, 'Role deleted');
   } catch (error) {
     next(error);
   }
@@ -258,6 +299,20 @@ export async function updateUserActiveStatus(req, res, next) {
   }
 }
 
+export async function deleteUser(req, res, next) {
+  try {
+    const result = await authService.deleteUser(
+      req.params.id,
+      req.user.userId,
+      req.ip,
+      req.get('User-Agent')
+    );
+    return sendSuccess(res, result, 'User deleted');
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function createInvitation(req, res, next) {
   try {
     const result = await authService.createInvitation(
@@ -291,7 +346,7 @@ export async function listInvitations(req, res, next) {
     const { page, limit, status } = req.query;
     const result = await authService.listInvitations(
       parseInt(page) || 1,
-      parseInt(limit) || 20,
+      Math.min(100, Math.max(1, parseInt(limit) || 20)),
       status
     );
     return sendSuccess(res, result.data, 'Success', 200, result.meta);

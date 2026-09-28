@@ -1,9 +1,17 @@
 import Joi from 'joi';
 import { ForbiddenError } from '../../utils/errors.js';
 
+const logoUrlSchema = Joi.string().trim().allow('', null).custom((value, helpers) => {
+  if (!value) return value;
+  const isHttpUrl = /^https?:\/\/\S+$/i.test(value);
+  const isUploadedPath = /^\/uploads\/[^/]+\/[\w.-]+\.(png|jpe?g|webp|gif|svg)$/i.test(value);
+  if (isHttpUrl || isUploadedPath) return value;
+  return helpers.error('any.invalid');
+}, 'logo URL');
+
 const partnerSchema = Joi.object({
   name: Joi.string().trim().min(1).max(255).required(),
-  logo_url: Joi.string().trim().uri().allow('', null),
+  logo_url: logoUrlSchema,
   website_url: Joi.string().trim().uri().allow('', null),
   partner_type: Joi.string().trim().valid('PHARMACY', 'INSURANCE', 'OTHER').default('PHARMACY'),
   description: Joi.string().trim().max(1000).allow('', null),

@@ -1,6 +1,8 @@
-import { Eye, ShoppingCart, FileText, Package } from 'lucide-react'
+import { Eye, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
+import { MedicineLogoStack } from '@/components/ui/interactive-medicine-card'
 import { money, stockState } from '../productUtils'
 
 export function StatusBadge({ state }) {
@@ -11,70 +13,74 @@ export function StatusBadge({ state }) {
 export default function ProductCard({ product, onView, onEdit }) {
   const isRx = product.requiresPrescription || product.classification === 'PRESCRIPTION_REQUIRED'
   const stock = stockState(product)
+  const imageUrl = product.imageUrl || product.image_url
+  const name = product.name
+  const category = product.categoryName || product.category_name || 'Pharmacy product'
+  const price = Number(product.price ?? 0)
+  const sellingUnit = product.sellingUnit || product.selling_unit || 'pack'
+  const packSize = product.packSize || product.pack_size
 
   return (
     <div
-      className="group relative overflow-hidden rounded-2xl cursor-pointer border border-border/70 shadow-sm hover:-translate-y-1 hover:shadow-xl transition-all duration-300"
-      style={{ aspectRatio: '1.35/1' }}
+      role="button"
+      tabIndex={0}
       onClick={onView}
+      onKeyDown={(e) => {
+        if (!e.defaultPrevented && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          onView()
+        }
+      }}
+      className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/70 bg-card text-card-foreground transition-all duration-300 hover:border-primary/30 hover:shadow-md"
     >
-      {/* Background image */}
-      {product.imageUrl ? (
-        <img
-          src={product.imageUrl}
-          alt={product.name}
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-        />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-muted">
-          <Package className="h-12 w-12 text-muted-foreground/30" />
+      <div className="pointer-events-none absolute right-0 top-1/2 h-72 w-72 -translate-y-1/2 translate-x-1/4 bg-[radial-gradient(50%_50%_at_50%_50%,hsl(var(--primary)/0.14)_0%,rgba(255,255,255,0)_100%)]" />
+
+      <div className="relative flex justify-center px-4 pt-4">
+        <MedicineLogoStack imageUrl={imageUrl} name={name} />
+        <span
+          className={cn(
+            'absolute right-3 top-2 rounded-full border px-2 py-0.5 text-[10px] font-medium text-white shadow-sm',
+            isRx ? 'border-transparent bg-amber-500/90' : 'border-transparent bg-emerald-500/90'
+          )}
+        >
+          {isRx ? 'Rx required' : 'OTC'}
+        </span>
+      </div>
+
+      <div className="relative z-10 flex flex-1 flex-col p-4">
+        <h3 className="line-clamp-2 text-base font-medium tracking-tight">{name}</h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">{category}</p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-lg font-semibold tracking-tight">{money(price)}</span>
+          <span className="text-xs text-muted-foreground">/ {packSize || sellingUnit}</span>
+          <StatusBadge state={stock} />
         </div>
-      )}
 
-      {/* Permanent bottom gradient so name/price are always readable */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.80) 0%, rgba(0,0,0,0.15) 50%, transparent 75%)' }}
-      />
-
-      {/* Hover darkening overlay */}
-      <div className="absolute inset-0 pointer-events-none bg-black/0 transition-colors duration-300 group-hover:bg-black/30" />
-
-      <div className="absolute left-4 top-4 flex items-center gap-2">
-        <span className={isRx ? 'rounded-full bg-amber-500 px-3 py-1 text-xs font-medium text-white' : 'rounded-full bg-emerald-500 px-3 py-1 text-xs font-medium text-white'}>{isRx ? 'Rx' : 'OTC'}</span>
-      </div>
-      <span className="absolute right-4 top-4 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm"><span className={stock.key === 'in' ? 'h-2 w-2 rounded-full bg-emerald-400' : stock.key === 'low' ? 'h-2 w-2 rounded-full bg-amber-400' : 'h-2 w-2 rounded-full bg-white/50'} />{stock.label}</span>
-
-      {/* Always-visible bottom info bar */}
-      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 px-5 pb-5 pointer-events-none">
-        <div className="min-w-0"><p className="truncate text-lg font-semibold text-white drop-shadow" title={product.name}>{product.name}</p><p className="mt-1 truncate text-sm text-white/75">{product.categoryName || 'Pharmacy product'}</p></div>
-        <div className="shrink-0 text-right"><p className="text-xl font-bold text-white drop-shadow">{money(product.price)}</p><p className="mt-1 text-xs text-white/70">{product.packSize ? `Per ${product.packSize}` : `Per ${product.sellingUnit || 'pack'}`}</p></div>
-      </div>
-
-      {/* Hover action buttons — slide up from bottom, sit above the info bar */}
-      <div
-        className="absolute inset-0 flex items-center justify-center gap-5 bg-black/75 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Button
-          size="sm"
-          variant="secondary"
-          className="flex h-20 w-20 flex-col gap-2 rounded-full border border-white/40 bg-transparent text-sm font-medium text-white hover:bg-white/15"
-          onClick={(e) => { e.stopPropagation(); onView() }}
-        >
-          <Eye className="h-7 w-7" /> View Details
-        </Button>
-        <Button
-          size="sm"
-          className="flex h-20 w-20 flex-col gap-2 rounded-full border border-white/40 bg-transparent text-sm font-medium text-white hover:bg-white/15"
-          onClick={(e) => { e.stopPropagation(); onEdit() }}
-        >
-          {isRx
-            ? <><FileText className="h-7 w-7" /> Request Rx</>
-            : <><ShoppingCart className="h-7 w-7" /> Add to Cart</>
-          }
-        </Button>
+        <div className="mt-auto flex items-center gap-2 pt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={(e) => {
+              e.stopPropagation()
+              onView()
+            }}
+          >
+            <Eye className="mr-1.5 h-4 w-4" /> View
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit()
+            }}
+          >
+            <Pencil className="mr-1.5 h-4 w-4" /> Edit
+          </Button>
+        </div>
       </div>
     </div>
   )

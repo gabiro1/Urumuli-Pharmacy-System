@@ -3,79 +3,6 @@ import { medicineCatalog, medicineCategories } from './medicineCatalog.js';
 import { seedAdminUser } from './adminSeed.js';
 import { seedStaff } from './staffSeed.js';
 
-const drugInteractionSeeds = [
-  {
-    medicineA: 'Ibuprofen',
-    medicineB: 'Paracetamol',
-    severity: 'MODERATE',
-    description: 'Concurrent use may increase the risk of kidney injury when taken in high doses or with dehydration. Both are analgesics; using them together should be clinically reviewed.',
-    mechanism: 'Additive nephrotoxicity with repeated high doses; overlapping analgesic use.',
-    recommendation: 'Avoid routine combined use. If a combination analgesic is required, confirm an appropriate dosing schedule and adequate hydration.',
-    evidenceLevel: 'Level B (moderate evidence)',
-    source: 'Urumuli safety reference — internal seed data',
-  },
-  {
-    medicineA: 'Amoxicillin',
-    medicineB: 'Azithromycin',
-    severity: 'MODERATE',
-    description: 'Both are antibacterial agents. Concurrent use is generally accepted only on explicit prescriber instruction for selected infections.',
-    mechanism: 'Overlapping antibiotic coverage; no direct metabolic interaction documented.',
-    recommendation: 'Only combine on an explicit prescription. Review renal function and allergy history before dispensing.',
-    evidenceLevel: 'Level C (limited evidence)',
-    source: 'Urumuli safety reference — internal seed data',
-  },
-  {
-    medicineA: 'Metformin',
-    medicineB: 'Paracetamol',
-    severity: 'MILD',
-    description: 'Rare case reports describe reduced metformin clearance with very high paracetamol doses. Standard doses are considered safe.',
-    mechanism: 'Possible competition for renal organic cation transporters at high paracetamol doses.',
-    recommendation: 'Use standard paracetamol doses. No adjustment is required at label-recommended dosing.',
-    evidenceLevel: 'Level C (limited evidence)',
-    source: 'Urumuli safety reference — internal seed data',
-  },
-  {
-    medicineA: 'Amlodipine',
-    medicineB: 'Metformin',
-    severity: 'MILD',
-    description: 'No clinically significant interaction expected at normal doses. Both are commonly co-prescribed in cardiometabolic care.',
-    mechanism: 'No established pharmacokinetic interaction.',
-    recommendation: 'Continue both medicines as prescribed. Monitor blood pressure and blood glucose as part of routine care.',
-    evidenceLevel: 'Level D (no known interaction)',
-    source: 'Urumuli safety reference — internal seed data',
-  },
-  {
-    medicineA: 'Salbutamol',
-    medicineB: 'Amlodipine',
-    severity: 'MODERATE',
-    description: 'Both can influence cardiovascular parameters. High-dose inhaled salbutamol with a calcium-channel blocker may produce additive effects on heart rate and blood pressure.',
-    mechanism: 'Additive cardiovascular effects (tachycardia and vasodilation).',
-    recommendation: 'Use the lowest effective salbutamol dose and monitor for palpitations or dizziness if these are used together.',
-    evidenceLevel: 'Level B (moderate evidence)',
-    source: 'Urumuli safety reference — internal seed data',
-  },
-  {
-    medicineA: 'Cetirizine',
-    medicineB: 'Omeprazole',
-    severity: 'LOW',
-    description: 'No clinically meaningful interaction expected. Both are widely used together in allergic reflux scenarios.',
-    mechanism: 'No established pharmacokinetic interaction.',
-    recommendation: 'No special monitoring required at recommended doses.',
-    evidenceLevel: 'Level D (no known interaction)',
-    source: 'Urumuli safety reference — internal seed data',
-  },
-  {
-    medicineA: 'Artemether and lumefantrine',
-    medicineB: 'Metformin',
-    severity: 'MODERATE',
-    description: 'Artemether/lumefantrine can prolong the QTc interval in susceptible patients. Review cardiovascular risk, electrolyte status, and interacting medicines.',
-    mechanism: 'Potential additive QTc prolongation risk with other medicines affecting cardiac conduction.',
-    recommendation: 'Review cardiac risk factors before dispensing the combination. If QTc prolongation is a concern, refer for clinical assessment.',
-    evidenceLevel: 'Level C (limited evidence)',
-    source: 'Urumuli safety reference — internal seed data',
-  },
-];
-
 const partners = [
   {
     name: 'Kigali Health Pharmacy',
@@ -279,57 +206,6 @@ async function seedStockBatches(pool) {
   console.log(`Seeded ${created} stock batches for FEFO sales.`);
 }
 
-async function seedDrugInteractions(pool) {
-  const { rows: medicines } = await pool.query(
-    'SELECT id, generic_name, name FROM medicines'
-  );
-
-  if (medicines.length === 0) {
-    console.log('No medicines found, skipping interaction seed.');
-    return;
-  }
-
-  const nameToId = new Map();
-  for (const medicine of medicines) {
-    nameToId.set(medicine.generic_name?.toLowerCase(), medicine.id);
-    nameToId.set(medicine.name?.toLowerCase(), medicine.id);
-  }
-
-  let inserted = 0;
-  for (const interaction of drugInteractionSeeds) {
-    const medicineAId = nameToId.get(interaction.medicineA.toLowerCase());
-    const medicineBId = nameToId.get(interaction.medicineB.toLowerCase());
-    if (!medicineAId || !medicineBId) continue;
-
-    const [lowId, highId] = [medicineAId, medicineBId].sort();
-
-    const exists = await pool.query(
-      'SELECT id FROM drug_interactions WHERE medicine_a_id = $1 AND medicine_b_id = $2',
-      [lowId, highId]
-    );
-    if (exists.rows.length > 0) continue;
-
-    await pool.query(
-      `INSERT INTO drug_interactions
-         (medicine_a_id, medicine_b_id, severity, description, mechanism, recommendation, evidence_level, source)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        lowId,
-        highId,
-        interaction.severity,
-        interaction.description,
-        interaction.mechanism,
-        interaction.recommendation,
-        interaction.evidenceLevel,
-        interaction.source,
-      ]
-    );
-    inserted++;
-  }
-
-  console.log(`Seeded ${inserted} drug interactions.`);
-}
-
 async function seed() {
   const pool = getPool();
   await seedAdminUser(pool);
@@ -337,7 +213,6 @@ async function seed() {
   await seedPartners(pool);
   await seedMedicines(pool);
   await seedStockBatches(pool);
-  await seedDrugInteractions(pool);
   await pool.end();
 }
 

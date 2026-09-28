@@ -14,12 +14,6 @@ export async function generateDailySnapshot(pharmacyId, date) {
     WHERE o.created_at::date = $2
   `, [pharmacyId, d]);
 
-  const { rows: [alerts] } = await query(`
-    SELECT COUNT(*) AS expiry_alerts
-    FROM medicine_expiry_alerts
-    WHERE status = 'ACTIVE' AND created_at::date = $2
-  `, [d]);
-
   const { rows: [chats] } = await query(`
     SELECT COUNT(*) AS chat_conversations
     FROM conversations
@@ -34,21 +28,19 @@ export async function generateDailySnapshot(pharmacyId, date) {
     totalRevenue: parseFloat(stats.total_revenue),
     activePatients: parseInt(stats.active_patients, 10),
     newPatients: parseInt(stats.new_patients, 10),
-    expiryAlerts: parseInt(alerts.expiry_alerts, 10),
     chatConversations: parseInt(chats.chat_conversations, 10),
   };
 
   await query(`
     INSERT INTO analytics_daily_snapshot
-    (pharmacy_id, snapshot_date, total_orders, completed_orders, total_revenue, active_patients, new_patients, expiry_alerts, chat_conversations)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    (pharmacy_id, snapshot_date, total_orders, completed_orders, total_revenue, active_patients, new_patients, chat_conversations)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     ON CONFLICT (pharmacy_id, snapshot_date) DO UPDATE SET
       total_orders = EXCLUDED.total_orders, completed_orders = EXCLUDED.completed_orders,
       total_revenue = EXCLUDED.total_revenue, active_patients = EXCLUDED.active_patients,
-      new_patients = EXCLUDED.new_patients, expiry_alerts = EXCLUDED.expiry_alerts,
-      chat_conversations = EXCLUDED.chat_conversations
+      new_patients = EXCLUDED.new_patients, chat_conversations = EXCLUDED.chat_conversations
   `, [pharmacyId || null, d, snapshot.totalOrders, snapshot.completedOrders, snapshot.totalRevenue,
-      snapshot.activePatients, snapshot.newPatients, snapshot.expiryAlerts, snapshot.chatConversations]);
+      snapshot.activePatients, snapshot.newPatients, snapshot.chatConversations]);
 
   return snapshot;
 }

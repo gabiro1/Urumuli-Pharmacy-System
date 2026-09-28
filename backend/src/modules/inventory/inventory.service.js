@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { env } from '../../config/env.js';
-import { parsePagination } from '../../utils/pagination.js';
+import { parsePagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { mapCategory, mapMedicine, mapSupplier, mapStockBatch, mapStockMovement } from '../../utils/serializers.js';
 import * as inventoryRepository from './inventory.repository.js';
 import { cacheRemember, cacheDelKey, invalidateMedicineCache } from '../../services/redis.service.js';
@@ -112,7 +112,7 @@ function ensureProductNumbers(data) {
 
 export async function listMedicines(queryParams) {
   const pagination = parsePagination(queryParams, {
-    allowedSortColumns: ['name', 'price', 'current_stock', 'created_at', 'updated_at', 'expiry_date'],
+    allowedSortColumns: ['display_priority', 'name', 'price', 'current_stock', 'created_at', 'updated_at', 'expiry_date'],
     defaultSortBy: 'name',
     defaultSortOrder: 'ASC',
   });
@@ -350,14 +350,18 @@ export async function getSummary() {
 // ---------------------------------------------------------------- Suppliers
 
 export async function listSuppliers(queryParams) {
+  const { page, limit, offset } = parsePagination(queryParams, { defaultLimit: 100 });
+
   const result = await inventoryRepository.listSuppliers({
     search: queryParams.search || null,
     isActive: queryParams.isActive !== undefined ? queryParams.isActive : null,
+    limit,
+    offset,
   });
 
   return {
     data: result.rows.map(mapSupplier),
-    meta: { total: result.total },
+    meta: buildPaginationMeta(result.total, page, limit),
   };
 }
 

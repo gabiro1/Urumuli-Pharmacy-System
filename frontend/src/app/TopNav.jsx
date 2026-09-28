@@ -5,7 +5,8 @@ import { useAuthStore } from '@/stores/authStore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import {
-  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Sun,
   Moon,
   Search,
@@ -36,8 +37,7 @@ const routeLabels = {
   'drug-checker': 'Drug Checker',
   search: 'Search',
   analytics: 'Analytics',
-  audit: 'Audit Logs',
-  admin: 'Admin',
+  staff: 'Team',
 }
 
 function Breadcrumbs() {
@@ -70,7 +70,7 @@ function Breadcrumbs() {
 }
 
 export function TopNav() {
-  const { toggleSidebar, toggleCommandPalette } = useUIStore()
+  const { toggleSidebar, toggleCommandPalette, sidebarOpen } = useUIStore()
   const { theme, toggleTheme } = useThemeStore()
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
@@ -134,9 +134,11 @@ export function TopNav() {
         variant="ghost"
         size="icon"
         onClick={toggleSidebar}
-        className="shrink-0 text-muted-foreground hover:text-foreground md:hidden"
+        title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        className="shrink-0 text-muted-foreground hover:text-foreground"
       >
-        <Menu className="h-5 w-5" />
+        {sidebarOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
       </Button>
 
       <div className="hidden md:flex items-center min-w-0 flex-1">

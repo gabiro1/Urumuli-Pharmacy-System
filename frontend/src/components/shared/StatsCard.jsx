@@ -139,9 +139,11 @@ export default function StatsCard({
   animate = true,
   className,
   children,
+  formatValue,
 }) {
   const styles = variantStyles[variant] || variantStyles.primary
   const counter = useAnimatedCounter(value, 1500, animate && value !== undefined)
+  const displayValue = formatValue ? formatValue(counter) : counter
 
   return (
     <motion.div
@@ -192,7 +194,7 @@ export default function StatsCard({
             {value !== undefined ? (
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold tracking-tight tabular-nums text-foreground">
-                  {counter}
+                  {displayValue}
                 </span>
                 {trend && (
                   <TrendBadge direction={trend} value={trendValue} />

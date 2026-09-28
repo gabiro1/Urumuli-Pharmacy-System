@@ -20,6 +20,10 @@ const statusSchema = z.object({
   }),
 });
 
+const replySchema = z.object({
+  body: z.string().trim().min(1, 'Reply cannot be empty').max(5000),
+});
+
 router.post('/', validate(schema), contactController.createMessage);
 
 router.use(authenticate);
@@ -28,5 +32,6 @@ router.use(authorize(ROLES.ADMIN, ROLES.MANAGER, ROLES.PHARMACIST));
 router.get('/', contactController.listMessages);
 router.get('/:id', contactController.getMessage);
 router.patch('/:id/status', validate(statusSchema), contactController.updateMessageStatus);
+router.post('/:id/reply', validate(replySchema), contactController.replyMessage);
 
 export default router;

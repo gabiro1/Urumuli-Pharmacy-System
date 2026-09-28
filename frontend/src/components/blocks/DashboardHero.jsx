@@ -305,9 +305,6 @@ export default function DashboardHero({ overview, prescriptions, inbox, loading 
               <Button className="w-full sm:w-auto" onClick={() => navigate('/app/prescriptions/create')}>
                 New prescription
               </Button>
-              <Button className="w-full sm:w-auto" variant="outline" onClick={() => navigate('/app/analytics')}>
-                View analytics
-              </Button>
             </div>
           </div>
 

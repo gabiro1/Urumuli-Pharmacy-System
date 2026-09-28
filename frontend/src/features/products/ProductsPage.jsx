@@ -11,7 +11,6 @@ import {
   Package,
   Pill,
   Plus,
-  Search,
   Sparkles,
   Tags,
   X,
@@ -19,7 +18,6 @@ import {
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -70,9 +68,9 @@ function StatCard({ icon: Icon, label, value, variant, onClick }) {
 
 function SkeletonGrid() {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-      {Array.from({ length: 10 }).map((_, index) => (
-        <Skeleton key={index} className="w-full rounded-xl" style={{ aspectRatio: '4/3' }} />
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {Array.from({ length: 12 }).map((_, index) => (
+        <Skeleton key={index} className="h-[300px] w-full rounded-2xl" />
       ))}
     </div>
   )
@@ -139,7 +137,9 @@ export default function ProductsPage() {
   })
 
   const queryString = useMemo(() => {
-    const [sortBy, sortOrder] = sort.split('_')
+    const tokens = sort.split('_')
+    const sortBy = tokens.length > 2 ? tokens.slice(0, -1).join('_') : tokens[0]
+    const sortOrder = tokens[tokens.length - 1]
     return buildQuery({
       search: debouncedSearch || null,
       productType: type,
@@ -279,25 +279,6 @@ export default function ProductsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, generic, SKU, brand…"
-              className="w-56 pl-9 sm:w-64"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
           {/* Filters */}
           <FiltersPanel
             filters={{ ...filters, productType: type }}
@@ -392,7 +373,7 @@ export default function ProductsPage() {
           </CardContent>
         </Card>
       ) : view === 'grid' ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {products.map((product) => (
             <ProductCard
               key={product.id}

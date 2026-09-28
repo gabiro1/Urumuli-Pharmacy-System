@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
@@ -16,6 +16,9 @@ import {
   Eye,
   EyeOff,
   Search,
+  ImagePlus,
+  UploadCloud,
+  X,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -71,27 +74,159 @@ const emptyForm = {
   is_active: true,
 }
 
+const LOGO_ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const LOGO_MAX_BYTES = 5 * 1024 * 1024
+
+function PartnerLogoUpload({ value, onChange }) {
+  const inputRef = useRef(null)
+  const [error, setError] = useState(null)
+  const [dragOver, setDragOver] = useState(false)
+
+  const preview = value?.previewUrl || value?.existingUrl || null
+
+  function handleFile(file) {
+    if (!file) return
+    if (!LOGO_ACCEPTED_TYPES.includes(file.type)) {
+      setError('Unsupported file type. Use JPG, PNG, or WEBP.')
+      return
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      setError('Logo is too large. Maximum size is 5 MB.')
+      return
+    }
+    setError(null)
+    if (value?.previewUrl) URL.revokeObjectURL(value.previewUrl)
+    onChange({
+      file,
+      previewUrl: URL.createObjectURL(file),
+      existingUrl: null,
+      removeExisting: false,
+    })
+  }
+
+  function handleRemove() {
+    if (value?.previewUrl) URL.revokeObjectURL(value.previewUrl)
+    onChange({ ...value, file: null, previewUrl: null, removeExisting: true })
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  return (
+    <div className="space-y-2">
+      <div
+        className={cn(
+          'flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-5 text-center transition-colors',
+          dragOver ? 'border-primary bg-primary/5' : 'border-border',
+          error && 'border-destructive'
+        )}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragOver(false)
+          handleFile(e.dataTransfer.files?.[0])
+        }}
+      >
+        {preview ? (
+          <div className="flex flex-col items-center gap-3">
+            <img
+              src={preview}
+              alt="Partner logo preview"
+              className="h-24 w-full max-w-[180px] rounded-md border bg-muted object-contain p-2"
+            />
+            <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => inputRef.current?.click()}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Replace
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={handleRemove}>
+                <X className="mr-2 h-4 w-4" /> Remove
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <span className="rounded-full bg-primary/10 p-3 text-primary">
+              <UploadCloud className="h-6 w-6" />
+            </span>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">
+                Drag &amp; drop a logo, or{' '}
+                <button
+                  type="button"
+                  className="text-primary underline-offset-4 hover:underline"
+                  onClick={() => inputRef.current?.click()}
+                >
+                  browse
+                </button>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                JPG, PNG or WEBP · up to 5 MB
+              </p>
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={() => inputRef.current?.click()}>
+              <ImagePlus className="mr-2 h-4 w-4" /> Upload from device
+            </Button>
+          </>
+        )}
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => handleFile(e.target.files?.[0])}
+      />
+    </div>
+  )
+}
+
 function PartnerFormDialog({ open, onOpenChange, partner }) {
   const queryClient = useQueryClient()
   const isEdit = !!partner
   const [form, setForm] = useState(partner ? { ...emptyForm, ...partner } : { ...emptyForm })
   const [errors, setErrors] = useState({})
+  const [logo, setLogo] = useState(null)
+
+  useEffect(() => {
+    if (!open) return
+    setLogo(partner?.logo_url ? { existingUrl: partner.logo_url, removeExisting: false } : null)
+  }, [open, partner])
 
   const mutation = useMutation({
-    mutationFn: (data) =>
-      isEdit ? api.put(`/partners/${partner.id}`, data) : api.post('/partners', data),
+    mutationFn: async (data) => {
+      let logo_url = data.logo_url
+      if (logo?.file) {
+        const fd = new FormData()
+        fd.append('logo', logo.file)
+        const upload = await api.post('/partners/upload-logo', fd)
+        logo_url = upload.data?.data?.logoUrl
+      }
+      const payload = { ...data, logo_url }
+      return isEdit ? api.put(`/partners/${partner.id}`, payload) : api.post('/partners', payload)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['partners'] })
       toast.success(isEdit ? 'Partner updated successfully' : 'Partner added successfully')
       onOpenChange(false)
       setForm({ ...emptyForm })
       setErrors({})
+      setLogo(null)
     },
     onError: (err) => {
       const msg = err.response?.data?.error || 'Failed to save partner'
       toast.error(msg)
     },
   })
+
+  function handleLogoChange(next) {
+    setLogo(next)
+    if (next?.file || next?.removeExisting) {
+      setForm((p) => ({ ...p, logo_url: '' }))
+    }
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -102,11 +237,14 @@ function PartnerFormDialog({ open, onOpenChange, partner }) {
       return
     }
     setErrors({})
+    let logo_url = form.logo_url?.trim() || null
+    if (logo?.file || logo?.removeExisting) logo_url = null
+    else if (logo?.existingUrl) logo_url = logo.existingUrl
     mutation.mutate({
       name: form.name.trim(),
       partner_type: form.partner_type,
       website_url: form.website_url?.trim() || null,
-      logo_url: form.logo_url?.trim() || null,
+      logo_url,
       description: form.description?.trim() || null,
       display_order: Number(form.display_order) || 0,
       is_active: form.is_active,
@@ -180,12 +318,14 @@ function PartnerFormDialog({ open, onOpenChange, partner }) {
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Logo URL</label>
+            <label className="text-sm font-medium">Logo</label>
+            <PartnerLogoUpload value={logo} onChange={handleLogoChange} />
             <Input
-              type="url"
-              placeholder="https://.../logo.png (optional)"
+              type="text"
+              placeholder="Or paste a logo URL (https://.../logo.png)"
               value={form.logo_url || ''}
               onChange={set('logo_url')}
+              disabled={!!logo?.file}
             />
           </div>
           <div className="space-y-1.5">

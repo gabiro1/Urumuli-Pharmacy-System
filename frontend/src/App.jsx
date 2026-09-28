@@ -18,7 +18,6 @@ const PrescriptionPages = lazy(() => import('@/features/prescriptions/pages/Pres
 const InventoryPage = lazy(() => import('@/features/inventory/pages/InventoryPage'))
 const ProductsPage = lazy(() => import('@/features/products/ProductsPage'))
 const SalesPage = lazy(() => import('@/features/sales/pages/SalesPage'))
-const AnalyticsPage = lazy(() => import('@/features/analytics/pages/AnalyticsPage'))
 const SearchPage = lazy(() => import('@/features/search/pages/SearchPage'))
 const PublicMedicinesPage = lazy(() => import('@/features/search/pages/PublicMedicinesPage'))
 const MedicineDetailsPage = lazy(() => import('@/features/shop/MedicineDetailsPage'))
@@ -27,12 +26,8 @@ const OrderTrackingPage = lazy(() => import('@/features/shop/OrderTrackingPage')
 const DispensingLabelPage = lazy(() => import('@/features/shop/DispensingLabelPage'))
 const PaymentPage = lazy(() => import('@/features/shop/PaymentPage'))
 const PrescriptionRequestPage = lazy(() => import('@/features/shop/PrescriptionRequestPage'))
-const DrugCheckerPage = lazy(() => import('@/features/safety/pages/DrugCheckerPage'))
-const AuditPage = lazy(() => import('@/features/audit/pages/AuditPage'))
-const AdminPage = lazy(() => import('@/features/admin/pages/AdminPage'))
-const StaffManagementPage = lazy(() => import('@/features/admin/pages/StaffManagementPage'))
+const TeamPage = lazy(() => import('@/features/admin/pages/TeamPage'))
 const PharmacyManagementPage = lazy(() => import('@/features/admin/pages/PharmacyManagementPage'))
-const ProfessionalCredentialsPage = lazy(() => import('@/features/pharmacist/pages/ProfessionalCredentialsPage'))
 const PartnersPage = lazy(() => import('@/features/admin/pages/PartnersPage'))
 const AcceptInvitationPage = lazy(() => import('@/features/auth/pages/AcceptInvitationPage'))
 const EmailVerificationPage = lazy(() => import('@/features/auth/pages/EmailVerificationPage'))
@@ -55,11 +50,7 @@ const ServicesPage = lazy(() => import('@/features/services/pages/ServicesPage')
 const ContactPage = lazy(() => import('@/features/contact/pages/ContactPage'))
 const ContactInboxPage = lazy(() => import('@/features/contact/pages/ContactInboxPage'))
 
-const ExpiryAlertsPage = lazy(() => import('@/features/expiry/pages/ExpiryAlertsPage'))
-const ControlledSubstancesPage = lazy(() => import('@/features/pharmacist/pages/ControlledSubstancesPage'))
-const TransfersPage = lazy(() => import('@/features/pharmacist/pages/TransfersPage'))
 const TelehealthPage = lazy(() => import('@/features/pharmacist/pages/TelehealthPage'))
-const RegulatoryReportsPage = lazy(() => import('@/features/admin/pages/RegulatoryReportsPage'))
 const ConsentPage = lazy(() => import('@/features/patient/pages/ConsentPage'))
 const RefillRemindersPage = lazy(() => import('@/features/patient/pages/RefillRemindersPage'))
 const DeliveryTrackingPage = lazy(() => import('@/features/patient/pages/DeliveryTrackingPage'))
@@ -164,42 +155,27 @@ export default function App() {
           }
         >
           <Route index element={<DashboardPage />} />
-          <Route path="prescriptions/*" element={<PrescriptionPages />} />
+          <Route path="prescriptions/*" element={<ProtectedRoute allowedPermissions={['prescription:view']}><PrescriptionPages /></ProtectedRoute>} />
           <Route path="inventory" element={<Navigate to="/app/products" replace />} />
-          <Route path="products" element={<ProductsPage />} />
-          <Route path="sales" element={<SalesPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="products" element={<ProtectedRoute allowedPermissions={['medicine:view']}><ProductsPage /></ProtectedRoute>} />
+          <Route path="sales" element={<ProtectedRoute allowedPermissions={['sale:view']}><SalesPage /></ProtectedRoute>} />
           <Route path="search" element={<SearchPage />} />
-          <Route path="safety/drug-checker" element={<DrugCheckerPage />} />
-          <Route path="audit" element={<AuditPage />} />
-          <Route
-            path="credentials"
-            element={
-              <ProtectedRoute allowedRoles={['PHARMACIST']}>
-                <ProfessionalCredentialsPage />
-              </ProtectedRoute>
-            }
-          />
           <Route
             path="admin"
-            element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN']}>
-                <AdminPage />
-              </ProtectedRoute>
-            }
+            element={<Navigate to="/app/staff" replace />}
           />
           <Route
             path="staff"
             element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'MANAGER']}>
-                <StaffManagementPage />
+              <ProtectedRoute allowedPermissions={['team:view']}>
+                <TeamPage />
               </ProtectedRoute>
             }
           />
           <Route
             path="pharmacies"
             element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'MANAGER']}>
+              <ProtectedRoute allowedPermissions={['pharmacy:view']}>
                 <PharmacyManagementPage />
               </ProtectedRoute>
             }
@@ -207,21 +183,17 @@ export default function App() {
           <Route
             path="partners"
             element={
-              <ProtectedRoute allowedRoles={['ADMIN']}>
+              <ProtectedRoute allowedPermissions={['partner:view']}>
                 <PartnersPage />
               </ProtectedRoute>
             }
           />
-          <Route path="inbox" element={<InboxPage />} />
-          <Route path="inbox/:id" element={<InboxPage />} />
-          <Route path="contact-inbox" element={<ContactInboxPage />} />
-          <Route path="orders" element={<OrderQueuePage />} />
-          <Route path="orders/:id" element={<OrderReviewPage />} />
-          <Route path="expiry-alerts" element={<ExpiryAlertsPage />} />
-          <Route path="controlled-substances" element={<ControlledSubstancesPage />} />
-          <Route path="transfers" element={<TransfersPage />} />
+          <Route path="inbox" element={<ProtectedRoute allowedPermissions={['chat:view']} restrictedRoles={['PHARMACIST']}><InboxPage /></ProtectedRoute>} />
+          <Route path="inbox/:id" element={<ProtectedRoute allowedPermissions={['chat:view']} restrictedRoles={['PHARMACIST']}><InboxPage /></ProtectedRoute>} />
+          <Route path="contact-inbox" element={<ProtectedRoute allowedPermissions={['feedback:view']}><ContactInboxPage /></ProtectedRoute>} />
+          <Route path="orders" element={<ProtectedRoute allowedPermissions={['order:view']} restrictedRoles={['PHARMACIST']}><OrderQueuePage /></ProtectedRoute>} />
+          <Route path="orders/:id" element={<ProtectedRoute allowedPermissions={['order:view']} restrictedRoles={['PHARMACIST']}><OrderReviewPage /></ProtectedRoute>} />
           <Route path="telehealth" element={<TelehealthPage />} />
-          <Route path="regulatory-reports" element={<RegulatoryReportsPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

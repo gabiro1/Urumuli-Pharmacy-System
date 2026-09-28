@@ -91,6 +91,16 @@ export async function listMedicines({ limit, offset, search, categoryId, require
     ? "ts_rank_cd(m.search_vector, plainto_tsquery('english', $1))"
     : '0';
 
+  const priorityExpr =
+    "CASE WHEN m.product_type = 'PHARMACY_CARE' THEN 0 WHEN NOT COALESCE(m.requires_prescription, false) THEN 1 ELSE 2 END";
+
+  const orderBy =
+    sortBy === 'display_priority'
+      ? `${hasSearch ? `${relevanceExpr} DESC, ` : ''}${priorityExpr} ASC, m.name ASC`
+      : hasSearch
+        ? `${relevanceExpr} DESC, ${sortColumn} ${normalizedSortOrder}`
+        : `${sortColumn} ${normalizedSortOrder}`;
+
   const countResult = await queryOne(
     `SELECT COUNT(*)::int AS total
      FROM medicines m
@@ -98,10 +108,6 @@ export async function listMedicines({ limit, offset, search, categoryId, require
      ${whereClause}`,
     params
   );
-
-  const orderBy = hasSearch
-    ? `${relevanceExpr} DESC, ${sortColumn} ${normalizedSortOrder}`
-    : `${sortColumn} ${normalizedSortOrder}`;
 
   const rows = await query(
     `SELECT ${medicineFields}
@@ -315,7 +321,7 @@ export async function productHasReferences(id) {
 
 // ---------------------------------------------------------------- Suppliers
 
-export async function listSuppliers({ search, isActive }) {
+export async function listSuppliers({ search, isActive, limit = 100, offset = 0 }) {
   const conditions = [];
   const params = [];
   let idx = 1;
@@ -346,8 +352,8 @@ export async function listSuppliers({ search, isActive }) {
   );
 
   const rows = await query(
-    `SELECT * FROM suppliers ${whereClause} ORDER BY name ASC`,
-    params
+    `SELECT * FROM suppliers ${whereClause} ORDER BY name ASC LIMIT $${idx++} OFFSET $${idx++}`,
+    [...params, limit, offset]
   );
 
   return { rows, total: countResult?.total ?? 0 };

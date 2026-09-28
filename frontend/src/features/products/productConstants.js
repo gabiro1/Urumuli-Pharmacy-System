@@ -75,6 +75,7 @@ export const PRESCRIPTION_OPTIONS = [
 ]
 
 export const SORT_OPTIONS = [
+  { value: 'display_priority_ASC', label: 'Cosmetics → OTC → Rx' },
   { value: 'name_ASC', label: 'Name: A → Z' },
   { value: 'name_DESC', label: 'Name: Z → A' },
   { value: 'price_ASC', label: 'Price: Low → High' },

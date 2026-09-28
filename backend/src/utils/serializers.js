@@ -187,6 +187,7 @@ export function mapPrescription(prescription, items = []) {
     updatedAt: prescription.updated_at || null,
     medicines: mappedItems,
     items: mappedItems,
+    medicineCount: prescription.medicine_count ?? 0,
     statusHistory: buildPrescriptionStatusHistory({
       ...prescription,
       status: normalizedStatus,
@@ -414,41 +415,6 @@ export function mapSale(sale, items = []) {
     createdAt: sale.created_at || null,
     updatedAt: sale.updated_at || null,
     items: mappedItems,
-  };
-}
-
-export function mapDrugInteraction(interaction) {
-  if (!interaction) return null;
-
-  return {
-    id: interaction.id,
-    medicineAId: interaction.medicine_a_id || null,
-    medicineBId: interaction.medicine_b_id || null,
-    medicineAName: interaction.medicine_a_name || null,
-    medicineBName: interaction.medicine_b_name || null,
-    severity: interaction.severity || 'MILD',
-    description: interaction.description || null,
-    recommendation: interaction.recommendation || null,
-    evidenceLevel: interaction.evidence_level || null,
-    source: interaction.source || null,
-    createdAt: interaction.created_at || null,
-  };
-}
-
-export function mapAllergy(allergy) {
-  if (!allergy) return null;
-
-  return {
-    id: allergy.id,
-    patientPhone: allergy.patient_phone || null,
-    patientName: allergy.patient_name || null,
-    allergenType: allergy.allergen_type || null,
-    allergenName: allergy.allergen_name || null,
-    severity: allergy.severity || null,
-    reaction: allergy.reaction || null,
-    notes: allergy.notes || null,
-    createdAt: allergy.created_at || null,
-    updatedAt: allergy.updated_at || null,
   };
 }
 

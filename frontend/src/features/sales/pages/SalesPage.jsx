@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import PosDialog from '@/features/sales/components/PosDialog'
 import SaleReceiptDialog from '@/features/sales/components/SaleReceiptDialog'
 
@@ -73,6 +74,7 @@ export default function SalesPage() {
   const queryClient = useQueryClient()
   const [posOpen, setPosOpen] = useState(false)
   const [receiptSale, setReceiptSale] = useState(null)
+  const [confirmSale, setConfirmSale] = useState(null)
 
   const summaryQuery = useQuery({
     queryKey: ['sales-summary'],
@@ -103,16 +105,27 @@ export default function SalesPage() {
   const sales = salesQuery.data?.data || []
 
   const handleVoid = (sale) => {
-    if (window.confirm(`Void sale ${sale.referenceNumber}? Stock will be restored.`)) {
-      transitionMutation.mutate({ id: sale.id, action: 'void', reason: 'Voided by staff' })
+    if (sale.status !== 'COMPLETED') {
+      toast.error('Only completed sales can be voided')
+      return
     }
+    setConfirmSale({ sale, action: 'void' })
   }
 
   const handleRefund = (sale) => {
-    if (window.confirm(`Refund sale ${sale.referenceNumber}? Stock will be restored.`)) {
-      transitionMutation.mutate({ id: sale.id, action: 'refund', reason: 'Refunded by staff' })
+    if (sale.status !== 'COMPLETED') {
+      toast.error('Only completed sales can be refunded')
+      return
     }
+    setConfirmSale({ sale, action: 'refund' })
   }
+
+  const isSaleBusy = (sale, action) =>
+    transitionMutation.isPending &&
+    transitionMutation.variables?.id === sale.id &&
+    transitionMutation.variables?.action === action
+
+  const confirmActionLabel = confirmSale?.action === 'void' ? 'Void' : 'Refund'
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-6">
@@ -209,19 +222,23 @@ export default function SalesPage() {
                             variant="outline"
                             size="icon"
                             title="Void"
-                            disabled={sale.status !== 'COMPLETED' || transitionMutation.isPending}
+                            disabled={transitionMutation.isPending}
                             onClick={() => handleVoid(sale)}
                           >
-                            <Ban className="w-4 h-4 text-destructive" />
+                            {isSaleBusy(sale, 'void') ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Ban className="w-4 h-4 text-destructive" />
+                            )}
                           </Button>
                           <Button
                             variant="outline"
                             size="icon"
                             title="Refund"
-                            disabled={sale.status !== 'COMPLETED' || transitionMutation.isPending}
+                            disabled={transitionMutation.isPending}
                             onClick={() => handleRefund(sale)}
                           >
-                            {transitionMutation.isPending ? (
+                            {isSaleBusy(sale, 'refund') ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <RotateCcw className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
@@ -288,6 +305,41 @@ export default function SalesPage() {
 
       <PosDialog open={posOpen} onOpenChange={setPosOpen} />
       <SaleReceiptDialog saleId={receiptSale?.id} open={Boolean(receiptSale)} onOpenChange={(open) => { if (!open) setReceiptSale(null) }} />
+
+      <AlertDialog open={Boolean(confirmSale)} onOpenChange={(open) => { if (!open) setConfirmSale(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmActionLabel} sale {confirmSale?.sale?.referenceNumber || confirmSale?.sale?.id?.slice(-8).toUpperCase()}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Stock will be restored to inventory and the sale will be recorded as {confirmActionLabel.toLowerCase()}ed. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={transitionMutation.isPending}
+              onClick={() => {
+                if (!confirmSale) return
+                transitionMutation.mutate({
+                  id: confirmSale.sale.id,
+                  action: confirmSale.action,
+                  reason: `${confirmActionLabel}ed by staff`,
+                })
+                setConfirmSale(null)
+              }}
+            >
+              {transitionMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                `Confirm ${confirmActionLabel}`
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   )
 }

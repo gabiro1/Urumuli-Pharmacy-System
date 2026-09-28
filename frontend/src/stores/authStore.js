@@ -51,7 +51,24 @@ export const useAuthStore = create(
 
       hasRole: (role) => {
         const user = get().user
-        return user?.role === role || user?.role === 'ADMIN'
+        return user?.role === role || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
+      },
+
+      hasPermission: (permission) => {
+        const user = get().user
+        if (!user) return false
+        if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return true
+        const permissions = user.permissions || []
+        return permissions.includes('*') || permissions.includes(permission)
+      },
+
+      hasAnyPermission: (permissionList) => {
+        const user = get().user
+        if (!user) return false
+        if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return true
+        const permissions = user.permissions || []
+        if (permissions.includes('*')) return true
+        return permissionList.some((permission) => permissions.includes(permission))
       },
     }),
     {

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -12,14 +12,13 @@ import {
   Pill,
   Clock,
   AlertCircle,
-  User,
   Stethoscope,
   ChevronRight,
+  ChevronLeft,
   FileText,
   Loader2,
-  Calendar,
-  GripVertical,
   Plus,
+  ExternalLink,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import api from '@/lib/api'
@@ -27,7 +26,7 @@ import { cn, formatRelativeTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -43,15 +42,40 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
-const COLUMNS = [
-  { id: 'PENDING', label: 'Pending', color: 'yellow' },
-  { id: 'UNDER_REVIEW', label: 'Under Review', color: 'blue' },
-  { id: 'APPROVED', label: 'Approved', color: 'green' },
-  { id: 'COMPLETED', label: 'Completed', color: 'purple' },
+const STATUS_TABS = [
+  { id: 'all', label: 'All' },
+  { id: 'PENDING', label: 'Pending' },
+  { id: 'UNDER_REVIEW', label: 'Under Review' },
+  { id: 'APPROVED', label: 'Approved' },
+  { id: 'COMPLETED', label: 'Completed' },
+  { id: 'REJECTED', label: 'Rejected' },
 ]
+
+const STATUS_LABEL = {
+  PENDING: 'Pending',
+  UNDER_REVIEW: 'Under Review',
+  APPROVED: 'Approved',
+  COMPLETED: 'Completed',
+  REJECTED: 'Rejected',
+}
+
+const STATUS_BADGE = {
+  PENDING: 'yellow',
+  UNDER_REVIEW: 'blue',
+  APPROVED: 'green',
+  COMPLETED: 'purple',
+  REJECTED: 'red',
+}
 
 const URGENCY_OPTIONS = [
   { value: 'all', label: 'All Urgency' },
@@ -60,105 +84,82 @@ const URGENCY_OPTIONS = [
   { value: 'STAT', label: 'Stat' },
 ]
 
-const STATUS_TRANSITIONS = {
-  PENDING: ['UNDER_REVIEW'],
-  UNDER_REVIEW: ['APPROVED', 'PENDING'],
-  APPROVED: ['COMPLETED', 'UNDER_REVIEW'],
-  COMPLETED: [],
-}
+const PAGE_SIZE = 10
 
-function PrescriptionCard({ prescription, onDragStart, onClick }) {
-  const initials = (prescription.patientName || 'UN')
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
+function PrescriptionFile({ fileUrl, fileType }) {
+  const [attempt, setAttempt] = useState(0)
+  const [state, setState] = useState({ loading: true, objectUrl: null, isImage: false, error: null })
 
-  const urgencyColors = {
-    NORMAL: 'border-l-green-500',
-    URGENT: 'border-l-amber-500',
-    STAT: 'border-l-red-500',
+  useEffect(() => {
+    if (!fileUrl) return
+    let cancelled = false
+    let objectUrl = null
+
+    setState({ loading: true, objectUrl: null, isImage: false, error: null })
+    api.get(fileUrl, { responseType: 'blob' })
+      .then((response) => {
+        if (cancelled) return
+        const mimeType = response.data?.type || fileType || ''
+        objectUrl = URL.createObjectURL(response.data)
+        setState({ loading: false, objectUrl, isImage: mimeType.startsWith('image/'), error: null })
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setState({
+          loading: false,
+          objectUrl: null,
+          isImage: false,
+          error: error.response?.data?.message || 'Unable to load the prescription file',
+        })
+      })
+
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [fileUrl, fileType, attempt])
+
+  const openInNewTab = () => {
+    if (!state.objectUrl) return
+    const popup = window.open(state.objectUrl, '_blank', 'noopener,noreferrer')
+    if (!popup) {
+      const link = document.createElement('a')
+      link.href = state.objectUrl
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      link.click()
+    }
   }
 
-  const statusLabel = { PENDING: 'Pending', UNDER_REVIEW: 'Under Review', APPROVED: 'Approved', COMPLETED: 'Completed' }
-  const statusColors = { PENDING: 'yellow', UNDER_REVIEW: 'blue', APPROVED: 'green', COMPLETED: 'purple' }
+  if (state.loading) {
+    return <Skeleton className="h-56 w-full rounded-lg" />
+  }
 
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      draggable
-      onDragStart={(e) => onDragStart(e, prescription)}
-      onClick={() => onClick(prescription)}
-      className={cn(
-        'group relative cursor-grab active:cursor-grabbing rounded-lg border bg-card p-4 shadow-sm transition-all hover:shadow-md hover:border-primary/50 border-l-4',
-        urgencyColors[prescription.urgency] || 'border-l-transparent'
-      )}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2.5">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs bg-primary/10 dark:bg-white/10 text-primary dark:text-foreground">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <p className="text-sm font-medium leading-tight truncate">
-              {prescription.patientName}
-            </p>
-            <p className="text-xs text-muted-foreground font-mono">
-              #{prescription.prescriptionId || prescription.id?.slice(-8).toUpperCase()}
-            </p>
-          </div>
-        </div>
-        <Badge color={statusColors[prescription.status]} className="text-[10px] px-1.5 py-0 shrink-0">
-          {statusLabel[prescription.status]}
-        </Badge>
+  if (state.error) {
+    return (
+      <div className="rounded-lg border border-dashed p-6 text-center">
+        <p className="text-sm text-muted-foreground">{state.error}</p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => setAttempt((a) => a + 1)}>
+          <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+          Retry
+        </Button>
       </div>
+    )
+  }
 
-      <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
-        <span className="flex items-center gap-1">
-          <Pill className="w-3 h-3" />
-          {(prescription.medicines || []).length} meds
-        </span>
-        <span className="flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          {formatRelativeTime(prescription.createdAt)}
-        </span>
-        {(prescription.urgency === 'URGENT' || prescription.urgency === 'STAT') && (
-          <span className={cn(
-            'flex items-center gap-1 font-medium',
-            prescription.urgency === 'STAT' ? 'text-red-500' : 'text-amber-500'
-          )}>
-            <AlertCircle className="w-3 h-3" />
-            {prescription.urgency}
-          </span>
-        )}
-      </div>
-
-      {prescription.pharmacistName && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-2 border-t">
-          <User className="w-3 h-3" />
-          <span className="truncate">{prescription.pharmacistName}</span>
-        </div>
-      )}
-
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <GripVertical className="w-4 h-4 text-muted-foreground" />
-      </div>
-    </motion.div>
-  )
-}
-
-function ColumnSkeleton() {
   return (
     <div className="space-y-3">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <Skeleton key={i} className="h-32 rounded-lg" />
-      ))}
+      <div className="rounded-lg overflow-hidden border bg-muted/30">
+        {state.isImage ? (
+          <img src={state.objectUrl} alt="Prescription" className="w-full max-h-96 object-contain" />
+        ) : (
+          <iframe src={state.objectUrl} title="Prescription file" className="w-full h-96" />
+        )}
+      </div>
+      <Button variant="outline" size="sm" onClick={openInNewTab}>
+        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+        Open in new tab
+      </Button>
     </div>
   )
 }
@@ -249,9 +250,9 @@ function PrescriptionDetailDrawer({ prescription, open, onOpenChange }) {
                           <p className="text-xs text-muted-foreground">{data.patientPhone}</p>
                         </div>
                       </div>
-                      {data.patientDOB && (
+                      {data.patientDob && (
                         <p className="text-xs text-muted-foreground">
-                          DOB: {format(new Date(data.patientDOB), 'PP')}
+                          DOB: {format(new Date(data.patientDob), 'PP')}
                         </p>
                       )}
                       {data.patientAllergies && data.patientAllergies.length > 0 && (
@@ -276,10 +277,10 @@ function PrescriptionDetailDrawer({ prescription, open, onOpenChange }) {
                           <Stethoscope className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium">{data.prescriberName || 'N/A'}</p>
-                          {data.prescriberLicense && (
+                          <p className="text-sm font-medium">{data.prescriberName || data.doctorName || 'N/A'}</p>
+                          {data.doctorLicenseNumber && (
                             <p className="text-xs text-muted-foreground font-mono">
-                              License: {data.prescriberLicense}
+                              License: {data.doctorLicenseNumber}
                             </p>
                           )}
                         </div>
@@ -303,9 +304,9 @@ function PrescriptionDetailDrawer({ prescription, open, onOpenChange }) {
                             <Pill className="w-4 h-4" />
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{med.name}</p>
+                            <p className="text-sm font-medium truncate">{med.name || med.medicineName}</p>
                             <p className="text-xs text-muted-foreground">
-                              {med.dosage} &middot; {med.frequency} &middot; {med.duration}
+                              {[med.dosage, med.frequency, med.duration].filter(Boolean).join(' \u00b7 ') || 'No dosing details'}
                             </p>
                           </div>
                         </div>
@@ -317,18 +318,12 @@ function PrescriptionDetailDrawer({ prescription, open, onOpenChange }) {
                   </div>
                 </div>
 
-                {data.imageUrl && (
+                {data.fileUrl && (
                   <div>
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                      Prescription Image
+                      Prescription File
                     </h4>
-                    <div className="rounded-lg overflow-hidden border bg-muted/30">
-                      <img
-                        src={data.imageUrl}
-                        alt="Prescription"
-                        className="w-full h-48 object-contain"
-                      />
-                    </div>
+                    <PrescriptionFile fileUrl={data.fileUrl} fileType={data.fileType} />
                   </div>
                 )}
 
@@ -476,20 +471,19 @@ function PrescriptionDetailDrawer({ prescription, open, onOpenChange }) {
 
 export default function PrescriptionsPage() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const [searchParams, setSearchParams] = useSearchParams()
 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({
+    status: 'all',
     urgency: 'all',
     dateFrom: '',
     dateTo: '',
     pharmacist: '',
   })
+  const [page, setPage] = useState(1)
   const [selectedPrescription, setSelectedPrescription] = useState(null)
-  const [draggedItem, setDraggedItem] = useState(null)
 
   const debounceRef = useRef(null)
 
@@ -503,92 +497,67 @@ export default function PrescriptionsPage() {
     }
   }, [search])
 
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, filters])
+
   const queryParams = useMemo(() => {
     const params = new URLSearchParams()
     if (debouncedSearch) params.set('search', debouncedSearch)
+    if (filters.status !== 'all') params.set('status', filters.status)
     if (filters.urgency !== 'all') params.set('urgency', filters.urgency)
     if (filters.dateFrom) params.set('fromDate', filters.dateFrom)
     if (filters.dateTo) params.set('toDate', filters.dateTo)
     if (filters.pharmacist) params.set('pharmacist', filters.pharmacist)
+    params.set('page', String(page))
+    params.set('limit', String(PAGE_SIZE))
     return params.toString()
-  }, [debouncedSearch, filters])
+  }, [debouncedSearch, filters, page])
 
-  const { data, isLoading, isError, error, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['prescriptions', queryParams],
     queryFn: () => api.get(`/prescriptions?${queryParams}`).then((r) => r.data),
   })
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }) => api.patch(`/prescriptions/${id}/status`, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
-      toast.success('Prescription moved')
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.message || 'Failed to update status')
-    },
-  })
+  const rows = data?.data || []
+  const meta = data?.meta
+  const totalPages = meta?.totalPages || 1
+  const currentPage = meta?.page || 1
+  const pageStart = rows.length === 0 ? 0 : (currentPage - 1) * (meta?.limit || PAGE_SIZE) + 1
+  const pageEnd = rows.length === 0 ? 0 : Math.min(currentPage * (meta?.limit || PAGE_SIZE), meta?.total ?? 0)
 
-  const allPrescriptions = data?.data?.prescriptions || data?.data || []
-
-  const columns = useMemo(() => {
-    const grouped = { PENDING: [], UNDER_REVIEW: [], APPROVED: [], COMPLETED: [], REJECTED: [] }
-    allPrescriptions.forEach((p) => {
-      const status = p.status || 'PENDING'
-      if (grouped[status]) {
-        grouped[status].push(p)
-      } else {
-        grouped.PENDING.push(p)
-      }
-    })
-    return COLUMNS.map((col) => ({
-      ...col,
-      items: grouped[col.id] || [],
-    }))
-  }, [allPrescriptions])
-
-  const handleDragStart = useCallback((e, prescription) => {
-    setDraggedItem(prescription)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', prescription.id || prescription._id)
-  }, [])
-
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }, [])
-
-  const handleDrop = useCallback(
-    (e, targetStatus) => {
-      e.preventDefault()
-      if (!draggedItem) return
-
-      const sourceStatus = draggedItem.status
-      const allowedTargets = STATUS_TRANSITIONS[sourceStatus] || []
-
-      if (!allowedTargets.includes(targetStatus)) {
-        toast.error(`Cannot move from ${sourceStatus} to ${targetStatus}`)
-        setDraggedItem(null)
-        return
-      }
-
-      if (sourceStatus !== targetStatus) {
-        statusMutation.mutate({ id: draggedItem.id || draggedItem._id, status: targetStatus })
-      }
-
-      setDraggedItem(null)
-    },
-    [draggedItem, statusMutation]
-  )
-
-  const hasActiveFilters = filters.urgency !== 'all' || filters.dateFrom || filters.dateTo || filters.pharmacist
+  const hasActiveFilters =
+    debouncedSearch ||
+    filters.status !== 'all' ||
+    filters.urgency !== 'all' ||
+    filters.dateFrom ||
+    filters.dateTo ||
+    filters.pharmacist
 
   const clearAllFilters = () => {
-    setFilters({ urgency: 'all', dateFrom: '', dateTo: '', pharmacist: '' })
+    setFilters({ status: 'all', urgency: 'all', dateFrom: '', dateTo: '', pharmacist: '' })
     setSearch('')
+    setPage(1)
   }
 
-  const getCardCount = (status) => columns.find((c) => c.id === status)?.items?.length || 0
+  const selectStatus = (status) => {
+    setFilters((prev) => ({ ...prev, status }))
+  }
+
+  const renderUrgency = (urgency) => {
+    if (urgency === 'URGENT' || urgency === 'STAT') {
+      return (
+        <span className={cn(
+          'inline-flex items-center gap-1 text-xs font-medium',
+          urgency === 'STAT' ? 'text-red-500' : 'text-amber-500'
+        )}>
+          <AlertCircle className="w-3.5 h-3.5" />
+          {urgency}
+        </span>
+      )
+    }
+    return <span className="text-xs text-muted-foreground">—</span>
+  }
 
   return (
     <motion.div
@@ -600,20 +569,44 @@ export default function PrescriptionsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Prescriptions</h1>
           <p className="text-muted-foreground mt-1">
-            Manage and track prescription workflows
+            Review, approve, and track prescription workflows
           </p>
         </div>
-        <Button variant="outline" onClick={() => refetch()} className="shrink-0 h-11">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button onClick={() => navigate('/app/prescriptions/create')}>
+            <Plus className="w-4 h-4 mr-2" />
+            New Prescription
+          </Button>
+          <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn('w-4 h-4 mr-2', isFetching && 'animate-spin')} />
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+        {STATUS_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => selectStatus(tab.id)}
+            className={cn(
+              'shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors border',
+              filters.status === tab.id
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background text-muted-foreground border-border hover:text-foreground hover:bg-muted/50'
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search by patient name or prescription ID..."
+            placeholder="Search by patient name, ID, doctor, or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10 h-11"
@@ -634,10 +627,9 @@ export default function PrescriptionsPage() {
         >
           <Filter className="w-4 h-4 mr-2" />
           Filters
-          {hasActiveFilters && <span className="ml-2 w-2 h-2 rounded-full bg-primary" />}
-        </Button>
-        <Button variant="outline" onClick={() => refetch()} className="h-11">
-          <RefreshCw className="w-4 h-4" />
+          {(filters.urgency !== 'all' || filters.dateFrom || filters.dateTo || filters.pharmacist) && (
+            <span className="ml-2 w-2 h-2 rounded-full bg-primary" />
+          )}
         </Button>
       </div>
 
@@ -699,7 +691,7 @@ export default function PrescriptionsPage() {
                 {hasActiveFilters && (
                   <Button variant="ghost" size="sm" onClick={clearAllFilters} className="mt-3 text-muted-foreground">
                     <X className="w-3 h-3 mr-1" />
-                    Clear all filters
+                    Clear search & filters
                   </Button>
                 )}
               </CardContent>
@@ -709,18 +701,16 @@ export default function PrescriptionsPage() {
       </AnimatePresence>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {COLUMNS.map((col) => (
-            <Card key={col.id}>
-              <CardHeader className="pb-3">
-                <Skeleton className="h-5 w-24" />
-              </CardHeader>
-              <CardContent>
-                <ColumnSkeleton />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardContent className="p-0">
+            <div className="p-4 space-y-4">
+              <Skeleton className="h-4 w-1/3" />
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       ) : isError ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <AlertTriangle className="w-10 h-10 text-destructive" />
@@ -732,7 +722,7 @@ export default function PrescriptionsPage() {
             Try Again
           </Button>
         </div>
-      ) : allPrescriptions.length === 0 ? (
+      ) : rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -744,7 +734,7 @@ export default function PrescriptionsPage() {
             </div>
             <h3 className="text-lg font-semibold">No prescriptions found</h3>
             <p className="text-muted-foreground max-w-sm text-center">
-              {debouncedSearch || hasActiveFilters
+              {hasActiveFilters
                 ? 'Try adjusting your search or filters'
                 : 'No prescriptions have been created yet'}
             </p>
@@ -755,59 +745,109 @@ export default function PrescriptionsPage() {
           </motion.div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {columns.map((column) => (
-            <Card
-              key={column.id}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, column.id)}
-              className={cn(
-                'transition-colors',
-                draggedItem && STATUS_TRANSITIONS[draggedItem.status]?.includes(column.id) && 'border-primary/50 bg-primary/5'
-              )}
-            >
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={cn(
-                    'w-2.5 h-2.5 rounded-full',
-                    column.color === 'yellow' && 'bg-yellow-500',
-                    column.color === 'blue' && 'bg-blue-500',
-                    column.color === 'green' && 'bg-green-500',
-                    column.color === 'purple' && 'bg-purple-500',
-                  )} />
-                  <CardTitle className="text-sm font-semibold">{column.label}</CardTitle>
-                </div>
-                <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                  {getCardCount(column.id)}
-                </span>
-              </CardHeader>
-              <CardContent>
-                <AnimatePresence mode="popLayout">
-                  {column.items.length === 0 ? (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-center py-8 text-muted-foreground"
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-6">Patient</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Urgency</TableHead>
+                  <TableHead>Medicines</TableHead>
+                  <TableHead>Pharmacist</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="pr-6 text-right">View</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((rx) => {
+                  const initials = (rx.patientName || 'UN')
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)
+                  return (
+                    <TableRow
+                      key={rx.id}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedPrescription(rx)}
                     >
-                      <p className="text-xs">No prescriptions</p>
-                    </motion.div>
-                  ) : (
-                    <div className="space-y-3">
-                      {column.items.map((prescription) => (
-                        <PrescriptionCard
-                          key={prescription.id || prescription._id}
-                          prescription={prescription}
-                          onDragStart={handleDragStart}
-                          onClick={setSelectedPrescription}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </AnimatePresence>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                      <TableCell className="pl-6">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9">
+                            <AvatarFallback className="text-xs bg-primary/10 dark:bg-white/10 text-primary dark:text-foreground">
+                              {initials}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="font-medium leading-tight truncate">{rx.patientName}</p>
+                            <p className="text-xs text-muted-foreground font-mono">
+                              #{rx.prescriptionId || rx.id?.slice(-8).toUpperCase()}
+                            </p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge color={STATUS_BADGE[rx.status] || 'default'}>
+                          {STATUS_LABEL[rx.status] || rx.status?.replace('_', ' ') || 'Unknown'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{renderUrgency(rx.urgency)}</TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                          <Pill className="w-3.5 h-3.5" />
+                          {rx.medicineCount ?? 0}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {rx.pharmacistName || <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5" />
+                          {rx.createdAt ? formatRelativeTime(rx.createdAt) : '—'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="pr-6 text-right">
+                        <ChevronRight className="w-4 h-4 ml-auto text-muted-foreground" />
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t">
+              <p className="text-sm text-muted-foreground">
+                Showing {pageStart}–{pageEnd} of {meta?.total || 0} prescriptions
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <PrescriptionDetailDrawer

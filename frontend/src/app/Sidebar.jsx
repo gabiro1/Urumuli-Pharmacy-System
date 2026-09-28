@@ -5,10 +5,6 @@ import {
   FileText,
   Pill,
   ShoppingCart,
-  ScrollText,
-  Shield,
-  BarChart3,
-  ShieldCheck,
   ChevronDown,
   LogOut,
   Settings,
@@ -16,7 +12,6 @@ import {
   MessageSquare,
   Building2,
   Users,
-  FileCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
@@ -33,60 +28,79 @@ import { useState, useRef, useEffect } from 'react'
 const navSections = [
   {
     label: 'Overview',
+    permissions: ['dashboard:view'],
     items: [
-      { label: 'Dashboard', icon: LayoutDashboard, path: '/app', end: true },
+      { label: 'Dashboard', icon: LayoutDashboard, path: '/app', end: true, permission: 'dashboard:view' },
     ],
   },
-  {
-    label: 'Operations',
-    roles: ['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER', 'INVENTORY_MANAGER', 'AUDITOR'],
-    items: [
-      { label: 'Products', icon: Pill, path: '/app/products' },
-      { label: 'Sales', icon: ShoppingCart, path: '/app/sales' },
-      { label: 'Drug Checker', icon: ShieldCheck, path: '/app/safety/drug-checker' },
-      { label: 'Analytics', icon: BarChart3, path: '/app/analytics' },
-    ],
-  },
-  {
-    label: 'Prescriptions',
-    items: [
-      { label: 'All Prescriptions', icon: FileText, path: '/app/prescriptions' },
-    ],
-  },
+
   {
     label: 'Patient Care',
-    roles: ['ADMIN', 'PHARMACIST', 'MANAGER'],
+    roles: ['PHARMACIST'],
+    permissions: ['chat:view', 'order:view'],
     items: [
-      { label: 'Inbox', icon: MessageSquare, path: '/app/inbox' },
-      { label: 'Medicine Requests', icon: ShoppingCart, path: '/app/orders' },
+      { label: 'Inbox', icon: MessageSquare, path: '/app/inbox', roles: ['PHARMACIST'] },
+      { label: 'Medicine Requests', icon: ShoppingCart, path: '/app/orders', roles: ['PHARMACIST'] },
+    ],
+  },
+   {
+    label: 'Prescriptions',
+    permissions: ['prescription:view'],
+    items: [
+      { label: 'All Prescriptions', icon: FileText, path: '/app/prescriptions', permission: 'prescription:view' },
     ],
   },
   {
     label: 'Contact',
-    roles: ['ADMIN', 'MANAGER', 'PHARMACIST'],
+    permissions: ['feedback:view'],
     items: [
-      { label: 'Contact Inbox', icon: MessageSquare, path: '/app/contact-inbox' },
+      { label: 'Contact Inbox', icon: MessageSquare, path: '/app/contact-inbox', permission: 'feedback:view' },
     ],
   },
   {
-    label: 'Compliance',
-    roles: ['ADMIN', 'MANAGER', 'AUDITOR', 'PHARMACIST'],
+    label: 'Operations',
+    permissions: ['medicine:view', 'sale:view'],
     items: [
-      { label: 'Audit Logs', icon: ScrollText, path: '/app/audit' },
-      { label: 'My Credentials', icon: FileCheck, path: '/app/credentials', roles: ['PHARMACIST'] },
+      { label: 'Products', icon: Pill, path: '/app/products', permission: 'medicine:view' },
+      { label: 'Sales', icon: ShoppingCart, path: '/app/sales', permission: 'sale:view' },
     ],
   },
   {
     label: 'System',
-    roles: ['ADMIN', 'MANAGER', 'SUPER_ADMIN'],
+    permissions: ['pharmacy:view', 'team:view', 'partner:view'],
     items: [
-      { label: 'Pharmacies', icon: Building2, path: '/app/pharmacies', roles: ['ADMIN', 'MANAGER', 'SUPER_ADMIN'] },
-      { label: 'Staff', icon: Users, path: '/app/staff', roles: ['ADMIN', 'MANAGER', 'SUPER_ADMIN'] },
-      { label: 'Admin', icon: Shield, path: '/app/admin' },
-      { label: 'Partners', icon: Building2, path: '/app/partners', roles: ['ADMIN'] },
+      { label: 'Pharmacies', icon: Building2, path: '/app/pharmacies', permission: 'pharmacy:view' },
+      { label: 'Team', icon: Users, path: '/app/staff', permission: 'team:view' },
+      { label: 'Partners', icon: Building2, path: '/app/partners', permission: 'partner:view' },
     ],
   },
 ]
+
+function canAccessItem(user, item) {
+  if (!user) return false
+  if (item.roles) {
+    if (user.role === 'SUPER_ADMIN') return true
+    return item.roles.includes(user.role)
+  }
+  if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return true
+  if (item.permission) return (user.permissions || []).includes('*') || (user.permissions || []).includes(item.permission)
+  return true
+}
+
+function canAccessSection(user, section) {
+  if (!user) return false
+  if (section.roles) {
+    if (user.role === 'SUPER_ADMIN') return true
+    return section.roles.includes(user.role)
+  }
+  if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return true
+  if (section.permissions) {
+    return (user.permissions || []).some(
+      (p) => p === '*' || section.permissions.includes(p)
+    )
+  }
+  return section.items.some((item) => canAccessItem(user, item))
+}
 
 function NavItem({ item, collapsed }) {
   const location = useLocation()
@@ -162,7 +176,7 @@ export function Sidebar() {
       <div className="flex-1 overflow-y-auto px-3 py-4">
         <nav className="space-y-6">
           {navSections.map((section) => {
-            if (section.roles && user && !section.roles.includes(user.role) && user.role !== 'ADMIN') {
+            if (user && !canAccessSection(user, section)) {
               return null
             }
             return (
@@ -174,11 +188,7 @@ export function Sidebar() {
                 )}
                 <div className="space-y-1">
                   {section.items
-                    .filter(
-                      (item) =>
-                        !item.roles ||
-                        (user && (item.roles.includes(user.role) || user.role === 'ADMIN'))
-                    )
+                    .filter((item) => canAccessItem(user, item))
                     .map((item) => (
                       <NavItem key={item.path} item={item} collapsed={collapsed} />
                     ))}

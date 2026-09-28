@@ -15,6 +15,8 @@ import {
   Warehouse,
   Tags,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -250,6 +252,7 @@ export default function InventoryPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [activeFilter, setActiveFilter] = useState('all')
+  const [page, setPage] = useState(1)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingMedicine, setEditingMedicine] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
@@ -263,6 +266,10 @@ export default function InventoryPage() {
     return () => clearTimeout(timer)
   }, [search])
 
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, categoryFilter, activeFilter])
+
   const summaryQuery = useQuery({
     queryKey: ['inventory-summary'],
     queryFn: () => api.get('/inventory/summary').then((res) => res.data),
@@ -274,20 +281,25 @@ export default function InventoryPage() {
   })
 
   const medicinesQuery = useQuery({
-    queryKey: ['inventory-medicines', debouncedSearch, categoryFilter, activeFilter],
+    queryKey: ['inventory-medicines', debouncedSearch, categoryFilter, activeFilter, page],
     queryFn: () => {
       const params = new URLSearchParams()
       if (debouncedSearch) params.set('search', debouncedSearch)
       if (categoryFilter !== 'all') params.set('categoryId', categoryFilter)
       if (activeFilter !== 'all') params.set('isActive', activeFilter)
+      params.set('page', String(page))
       params.set('limit', '50')
       return api.get(`/inventory/medicines?${params.toString()}`).then((res) => res.data)
     },
+    keepPreviousData: true,
   })
 
   const categories = categoriesQuery.data?.data || []
   const summary = summaryQuery.data?.data || {}
+  const medicinesMeta = medicinesQuery.data?.meta || {}
   const medicines = medicinesQuery.data?.data || []
+  const inventoryTotalResults = medicinesMeta.total ?? medicines.length
+  const inventoryTotalPages = Math.max(1, medicinesMeta.totalPages ?? 1)
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -419,7 +431,7 @@ export default function InventoryPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Medicine Catalogue</CardTitle>
-          <span className="text-xs text-muted-foreground">{medicines.length} results</span>
+          <span className="text-xs text-muted-foreground">{inventoryTotalResults} results</span>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -509,6 +521,31 @@ export default function InventoryPage() {
               )}
             </TableBody>
           </Table>
+          {inventoryTotalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-3">
+              <p className="text-sm text-muted-foreground">
+                Page {page} of {inventoryTotalPages} ({inventoryTotalResults} total)
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1 || medicinesQuery.isFetching}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= inventoryTotalPages || medicinesQuery.isFetching}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next<ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
       </motion.div>

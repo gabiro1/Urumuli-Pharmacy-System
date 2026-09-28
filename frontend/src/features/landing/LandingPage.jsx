@@ -30,6 +30,7 @@ import BackgroundBeams from '@/components/magicui/background-beams'
 import PublicNavbar from '@/components/shared/PublicNavbar'
 import HeroSection from '@/components/ui/hero-section-9'
 import InteractiveMedicineCard from '@/components/ui/interactive-medicine-card'
+import { Marquee } from '@/components/ui/marquee'
 
 function TiltCard({ children, className }) {
   const cardRef = useRef(null)
@@ -159,6 +160,19 @@ export default function LandingPage() {
   const navigate = useNavigate()
   const [featuredMedicines, setFeaturedMedicines] = useState([])
   const [medicinesLoading, setMedicinesLoading] = useState(true)
+  const [partners, setPartners] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+    api.get('/partners/active')
+      .then((res) => {
+        if (!cancelled) setPartners(res.data?.data || [])
+      })
+      .catch(() => {
+        if (!cancelled) setPartners([])
+      })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -313,6 +327,64 @@ export default function LandingPage() {
           'https://images.unsplash.com/photo-1576602976047-174e57a47881?w=800&h=800&fit=crop&q=80',
         ]}
       />
+
+      {/* ========== PARTNERS ========== */}
+      {partners.length > 0 && (
+        <section className="relative border-b border-border/50 py-10">
+          <div className="content-shell">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="text-center mb-2"
+            >
+              <p className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 dark:bg-white/10 text-primary dark:text-foreground text-xs font-medium uppercase tracking-wider">
+                <Building2 className="w-3 h-3" />
+                Our partners
+              </p>
+              <p className="mt-3 text-muted-foreground text-sm max-w-xl mx-auto">
+                Trusted by pharmacies and insurance partners across the region.
+              </p>
+            </motion.div>
+            <Marquee pauseOnHover speed={40} className="sm:mt-6 mt-6">
+              {[...partners]
+                .sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+                .map((partner) => {
+                  const Icon = partner.partner_type === 'PHARMACY' ? HeartPulse : partner.partner_type === 'INSURANCE' ? ShieldCheck : Building2
+                  return partner.logo_url ? (
+                    <a
+                      key={partner.id}
+                      href={partner.website_url || undefined}
+                      target={partner.website_url ? '_blank' : undefined}
+                      rel={partner.website_url ? 'noopener noreferrer' : undefined}
+                      className="mx-[3rem] flex shrink-0 items-center"
+                    >
+                      <img
+                        src={partner.logo_url}
+                        alt={partner.name}
+                        className="h-8 w-auto max-w-[160px] object-contain"
+                      />
+                    </a>
+                  ) : (
+                    <a
+                      key={partner.id}
+                      href={partner.website_url || undefined}
+                      target={partner.website_url ? '_blank' : undefined}
+                      rel={partner.website_url ? 'noopener noreferrer' : undefined}
+                      className="mx-[3rem] flex shrink-0 items-center gap-2.5 text-muted-foreground/70 hover:text-foreground transition-colors"
+                    >
+                      <Icon className="w-5 h-5" />
+                      <span className="whitespace-nowrap text-xl font-bold tracking-tight">
+                        {partner.name}
+                      </span>
+                    </a>
+                  )
+                })}
+            </Marquee>
+          </div>
+        </section>
+      )}
 
       {/* ========== FEATURED MEDICINES ========== */}
       <section className="section-shell-tight relative border-y border-border/50">

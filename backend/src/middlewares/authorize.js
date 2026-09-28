@@ -75,6 +75,55 @@ export function selfOrAdmin(paramUserIdField = 'userId') {
 }
 
 /**
+ * Role OR permission based access control without hierarchy elevation.
+ *
+ * Grants access when the user's role is listed in `roles`, the user is an
+ * admin / super admin (system bypass), OR the user's role holds one of the
+ * `permissions` in the role_permissions table. Has a "*" wildcard support.
+ *
+ * Use for admin/team routes so user-defined roles with the matching
+ * permission (e.g. a custom "SUPERVISOR" role granted `team:manage`) can
+ * act on them without hierarchy quirks.
+ */
+export function authorizeAccess({ roles = [], permissions = [] } = {}) {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return next(new ForbiddenError('Authentication required'));
+    }
+
+    const { role } = req.user;
+
+    if (roles.includes(role) || role === 'ADMIN' || role === 'SUPER_ADMIN') {
+      return next();
+    }
+
+    if (permissions.length === 0) {
+      return next(
+        new ForbiddenError(`Role '${role}' does not have permission for this action`)
+      );
+    }
+
+    try {
+      const granted = await getPermissionsForRole(role);
+      const hasAccess =
+        granted.includes('*') || granted.some((permission) => permissions.includes(permission));
+
+      if (hasAccess) {
+        return next();
+      }
+
+      return next(
+        new ForbiddenError(
+          `Role '${role}' does not have the required permission for this action. Required: ${permissions.join(', ')}`
+        )
+      );
+    } catch (error) {
+      return next(new ForbiddenError('Failed to check permissions'));
+    }
+  };
+}
+
+/**
  * Require a specific permission for the current user's role.
  * Checks the role_permissions table. SUPER_ADMIN and ADMIN bypass.
  */

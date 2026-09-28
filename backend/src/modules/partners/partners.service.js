@@ -1,7 +1,11 @@
 import * as partnersRepository from './partners.repository.js';
 import { parsePagination } from '../../utils/pagination.js';
-import { NotFoundError } from '../../utils/errors.js';
+import { NotFoundError, ValidationError } from '../../utils/errors.js';
 import { cacheRemember, invalidatePartnerCache } from '../../services/redis.service.js';
+import fs from 'fs/promises';
+import path from 'path';
+import { randomUUID } from 'crypto';
+import { env } from '../../config/env.js';
 
 export const getActivePartners = async () => {
   return cacheRemember('partners:active', 600, async () => {
@@ -63,4 +67,20 @@ export const deletePartner = async (id) => {
   const result = await partnersRepository.deletePartner(id);
   await invalidatePartnerCache();
   return result;
+};
+
+export const uploadPartnerLogo = async (file) => {
+  if (!file) throw new ValidationError('A logo file is required');
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+    throw new ValidationError('Unsupported file type. Use JPG, PNG, or WEBP.');
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new ValidationError('Logo is too large. Maximum size is 5 MB.');
+  }
+  const extension = file.mimetype === 'image/jpeg' ? 'jpg' : file.mimetype.split('/')[1];
+  const relativePath = `partners/${randomUUID()}.${extension}`;
+  const target = path.resolve(env.UPLOAD_DIR, relativePath);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, file.buffer);
+  return { logoUrl: `/uploads/${relativePath}` };
 };

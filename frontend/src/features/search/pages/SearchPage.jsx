@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
@@ -11,6 +11,11 @@ import {
   PackageSearch,
   ShoppingCart,
   Upload,
+  Loader2,
+  AlertTriangle,
+  ChevronDown,
+  LayoutGrid,
+  ArrowUpDown,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -29,6 +34,15 @@ const RX_OPTIONS = [
   { value: 'all', label: 'All' },
   { value: 'false', label: 'OTC' },
   { value: 'true', label: 'Rx only' },
+]
+
+const SORT_OPTIONS = [
+  { value: 'display_priority', sortBy: 'display_priority', sortOrder: 'ASC', label: 'Cosmetics → OTC → Rx' },
+  { value: 'name_ASC', sortBy: 'name', sortOrder: 'ASC', label: 'Name: A → Z' },
+  { value: 'name_DESC', sortBy: 'name', sortOrder: 'DESC', label: 'Name: Z → A' },
+  { value: 'price_ASC', sortBy: 'price', sortOrder: 'ASC', label: 'Price: Low → High' },
+  { value: 'price_DESC', sortBy: 'price', sortOrder: 'DESC', label: 'Price: High → Low' },
+  { value: 'created_at_DESC', sortBy: 'created_at', sortOrder: 'DESC', label: 'Newest' },
 ]
 
 function getStockStatus(medicine) {
@@ -176,6 +190,28 @@ function MedicineCardSkeleton() {
   )
 }
 
+function LoadMoreSentinel({ show, onVisible, children }) {
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !show) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onVisible()
+      },
+      { rootMargin: '400px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [show, onVisible])
+
+  if (!show) return null
+  return <div ref={ref}>{children}</div>
+}
+
+const PAGE_SIZE = 24
+
 export default function SearchPage({ publicMode = false }) {
   const navigate = useNavigate()
   const addItem = useCartStore((state) => state.addItem)
@@ -187,6 +223,7 @@ export default function SearchPage({ publicMode = false }) {
   const [rxFilter, setRxFilter] = useState('all')
   const [availabilityFilter, setAvailabilityFilter] = useState('all')
   const [dosageFormFilter, setDosageFormFilter] = useState('all')
+  const [sort, setSort] = useState('display_priority')
   const [showSuggestions, setShowSuggestions] = useState(false)
 
   useEffect(() => {
@@ -217,22 +254,51 @@ export default function SearchPage({ publicMode = false }) {
     queryFn: () => api.get('/inventory/categories').then((res) => res.data),
   })
 
-  const medicinesQuery = useQuery({
-    queryKey: ['app-search', debouncedSearch, categoryFilter, rxFilter, availabilityFilter, dosageFormFilter],
-    queryFn: () => {
+  const medicinesQuery = useInfiniteQuery({
+    queryKey: ['app-search', debouncedSearch, categoryFilter, rxFilter, availabilityFilter, dosageFormFilter, sort],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => {
       const params = new URLSearchParams()
       if (debouncedSearch) params.set('search', debouncedSearch)
       if (categoryFilter !== 'all') params.set('categoryId', categoryFilter)
       if (rxFilter !== 'all') params.set('requiresPrescription', rxFilter)
       if (availabilityFilter !== 'all') params.set('availability', availabilityFilter)
       if (dosageFormFilter !== 'all') params.set('dosageForm', dosageFormFilter)
-      params.set('limit', '24')
+      const sortOption = SORT_OPTIONS.find((option) => option.value === sort) || SORT_OPTIONS[0]
+      params.set('sortBy', sortOption.sortBy)
+      params.set('sortOrder', sortOption.sortOrder)
+      params.set('page', String(pageParam))
+      params.set('limit', String(PAGE_SIZE))
       return api.get(`/search?${params.toString()}`).then((res) => res.data)
+    },
+    getNextPageParam: (lastPage) => {
+      const meta = lastPage?.meta || {}
+      const page = meta.page || 1
+      const totalPages = meta.totalPages ?? meta.pages ?? 1
+      return page < totalPages ? page + 1 : undefined
     },
   })
 
   const categories = categoriesQuery.data?.data || []
-  const medicines = medicinesQuery.data?.data || []
+
+  const medicinePages = medicinesQuery.data?.pages || []
+  const medicines = useMemo(() => {
+    const seen = new Map()
+    for (const page of medicinePages) {
+      for (const item of page?.data || []) {
+        if (item?.id != null && !seen.has(item.id)) seen.set(item.id, item)
+      }
+    }
+    return Array.from(seen.values())
+  }, [medicinePages])
+
+  const lastMeta = medicinePages[medicinePages.length - 1]?.meta || {}
+  const totalResults = lastMeta.total ?? medicines.length
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = medicinesQuery
+
+  const handleLoadMore = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   const resetFilters = () => {
     setSearch('')
@@ -240,6 +306,7 @@ export default function SearchPage({ publicMode = false }) {
     setRxFilter('all')
     setAvailabilityFilter('all')
     setDosageFormFilter('all')
+    setSort('display_priority')
   }
 
   return (
@@ -263,50 +330,54 @@ export default function SearchPage({ publicMode = false }) {
             />
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <button
-                onClick={() => setCategoryFilter('all')}
-                className={cn(
-                  'shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all',
-                  categoryFilter === 'all'
-                    ? 'border-transparent bg-primary text-primary-foreground shadow-sm'
-                    : 'border-border bg-background text-muted-foreground hover:border-foreground/20 hover:text-foreground'
-                )}
-              >
-                All categories
-              </button>
-              {categories.map((category) => (
-                <button
-                  key={category.id}
-                  onClick={() => setCategoryFilter(category.id)}
-                  className={cn(
-                    'shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all',
-                    categoryFilter === category.id
-                      ? 'border-transparent bg-primary text-primary-foreground shadow-sm'
-                      : 'border-border bg-background text-muted-foreground hover:border-foreground/20 hover:text-foreground'
-                  )}
-                >
-                  {category.name}
-                </button>
-              ))}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="h-10 w-full gap-2 rounded-xl border-border/70 bg-card px-3.5 text-sm font-medium shadow-sm focus:ring-primary/30 sm:w-[220px]">
+                  <LayoutGrid className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  <SelectItem value="all">All categories</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="inline-flex shrink-0 items-center rounded-xl border border-border bg-muted p-1">
+                {RX_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setRxFilter(option.value)}
+                    className={cn(
+                      'rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
+                      rxFilter === option.value
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="inline-flex shrink-0 items-center self-start rounded-xl border border-border bg-muted p-1 sm:self-auto">
-              {RX_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setRxFilter(option.value)}
-                  className={cn(
-                    'rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
-                    rxFilter === option.value
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+
+            <Select value={sort} onValueChange={setSort}>
+              <SelectTrigger className="h-10 w-full gap-2 rounded-xl border-border/70 bg-card px-3.5 text-sm font-medium shadow-sm focus:ring-primary/30 sm:w-[220px]">
+                <ArrowUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent className="max-h-80">
+                {SORT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       ) : (
@@ -413,9 +484,10 @@ export default function SearchPage({ publicMode = false }) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}><SelectTrigger><SelectValue placeholder="Availability" /></SelectTrigger><SelectContent><SelectItem value="all">All availability</SelectItem><SelectItem value="IN_STOCK">In stock</SelectItem><SelectItem value="LOW_STOCK">Low stock</SelectItem><SelectItem value="UNAVAILABLE">Unavailable</SelectItem></SelectContent></Select>
               <Select value={dosageFormFilter} onValueChange={setDosageFormFilter}><SelectTrigger><SelectValue placeholder="Dosage form" /></SelectTrigger><SelectContent><SelectItem value="all">All dosage forms</SelectItem>{['Tablet','Capsule','Delayed-release capsule','Metered-dose inhaler','Powder for oral solution'].map(form=><SelectItem key={form} value={form}>{form}</SelectItem>)}</SelectContent></Select>
+              <Select value={sort} onValueChange={setSort}><SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger><SelectContent>{SORT_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select>
             </div>
           </CardContent>
         </Card>
@@ -423,8 +495,8 @@ export default function SearchPage({ publicMode = false }) {
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="font-medium text-muted-foreground">
-          <span className="font-bold text-foreground">{medicines.length}</span>{' '}
-          {medicines.length === 1 ? 'product' : 'products'} found
+          <span className="font-bold text-foreground">{totalResults}</span>{' '}
+          {totalResults === 1 ? 'product' : 'products'} found
         </p>
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
@@ -438,6 +510,21 @@ export default function SearchPage({ publicMode = false }) {
             <MedicineCardSkeleton key={index} />
           ))}
         </div>
+      ) : medicines.length === 0 && medicinesQuery.isError ? (
+        <Card className="rounded-2xl border-border/60">
+          <CardContent className="flex flex-col items-center px-6 py-16 text-center">
+            <div className="inline-flex rounded-2xl border border-border/60 bg-muted p-5">
+              <AlertTriangle className="h-10 w-10 text-destructive" />
+            </div>
+            <h3 className="mt-5 text-lg font-semibold">Failed to load products</h3>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              We couldn&apos;t reach the catalog. Check your connection and try again.
+            </p>
+            <Button variant="outline" size="sm" className="mt-5" onClick={() => medicinesQuery.refetch()}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
       ) : medicines.length === 0 ? (
         <Card className="rounded-2xl border-border/60">
           <CardContent className="flex flex-col items-center px-6 py-16 text-center">
@@ -464,18 +551,52 @@ export default function SearchPage({ publicMode = false }) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {medicines.map((medicine, index) => (
-            <PharmacyProductCard
-              key={medicine.id}
-              medicine={medicine}
-              index={index}
-              publicMode={publicMode}
-              onView={() => navigate(`/medicines/${medicine.id}`)}
-              onAdd={() => { if (medicine.classification === 'PRESCRIPTION_REQUIRED' || medicine.requiresPrescription) { navigate(`/medicines/${medicine.id}/prescription`); return } if (!isAuthenticated) { navigate('/login'); return } addItem(medicine, 1); toast.success(`${medicine.name} added to your cart`) }}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {medicines.map((medicine, index) => (
+              <PharmacyProductCard
+                key={medicine.id}
+                medicine={medicine}
+                index={index}
+                publicMode={publicMode}
+                onView={() => navigate(`/medicines/${medicine.id}`)}
+                onAdd={() => { if (medicine.classification === 'PRESCRIPTION_REQUIRED' || medicine.requiresPrescription) { navigate(`/medicines/${medicine.id}/prescription`); return } if (!isAuthenticated) { navigate('/login'); return } addItem(medicine, 1); toast.success(`${medicine.name} added to your cart`) }}
+              />
+            ))}
+          </div>
+
+          <LoadMoreSentinel show={hasNextPage} onVisible={handleLoadMore}>
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+              {isFetchingNextPage ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading more products...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <ChevronDown className="h-4 w-4" />
+                  Scroll for more results
+                </span>
+              )}
+            </div>
+          </LoadMoreSentinel>
+
+          {medicinesQuery.isError && (
+            <div className="flex items-center justify-center gap-3 py-4 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              Failed to load more products.
+              <Button variant="outline" size="sm" onClick={handleLoadMore}>
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {!hasNextPage && !medicinesQuery.isError && medicines.length >= PAGE_SIZE && (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              You&apos;ve reached the end of the catalog
+            </p>
+          )}
+        </>
       )}
 
       {publicMode && (

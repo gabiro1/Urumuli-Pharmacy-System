@@ -2,38 +2,32 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useUIStore } from '@/stores/uiStore'
+import { useAuthStore } from '@/stores/authStore'
 import {
   LayoutDashboard,
   Pill,
   ShoppingCart,
   FileText,
-  ShieldCheck,
   Search,
-  BarChart3,
-  ScrollText,
-  Shield,
+  Users,
   Command,
   ArrowRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navigationItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/app', section: 'Navigation' },
-  { label: 'Inventory', icon: Pill, path: '/app/inventory', section: 'Navigation' },
-  { label: 'Sales', icon: ShoppingCart, path: '/app/sales', section: 'Navigation' },
-  { label: 'Prescriptions', icon: FileText, path: '/app/prescriptions', section: 'Navigation' },
-  { label: 'Drug Checker', icon: ShieldCheck, path: '/app/safety/drug-checker', section: 'Navigation' },
-  { label: 'Search', icon: Search, path: '/app/search', section: 'Navigation' },
-  { label: 'Analytics', icon: BarChart3, path: '/app/analytics', section: 'Navigation' },
-  { label: 'Audit Logs', icon: ScrollText, path: '/app/audit', section: 'Navigation' },
-  { label: 'Admin', icon: Shield, path: '/app/admin', section: 'Navigation' },
+  { label: 'Dashboard', icon: LayoutDashboard, path: '/app', section: 'Navigation', permission: 'dashboard:view' },
+  { label: 'Sales', icon: ShoppingCart, path: '/app/sales', section: 'Navigation', permission: 'sale:view' },
+  { label: 'Prescriptions', icon: FileText, path: '/app/prescriptions', section: 'Navigation', permission: 'prescription:view' },
+  { label: 'Multimedia Search', icon: Search, path: '/app/search', section: 'Navigation' },
+  { label: 'Team', icon: Users, path: '/app/staff', section: 'Navigation', permission: 'team:view' },
 ]
 
 const medicineQuickAccess = [
-  { label: 'Paracetamol 500mg', icon: Pill, path: '/app/products?q=paracetamol', section: 'Products' },
-  { label: 'Amoxicillin 250mg', icon: Pill, path: '/app/products?q=amoxicillin', section: 'Products' },
-  { label: 'Ibuprofen 400mg', icon: Pill, path: '/app/products?q=ibuprofen', section: 'Products' },
-  { label: 'Omeprazole 20mg', icon: Pill, path: '/app/products?q=omeprazole', section: 'Products' },
+  { label: 'Paracetamol 500mg', icon: Pill, path: '/app/products?q=paracetamol', section: 'Products', permission: 'medicine:view' },
+  { label: 'Amoxicillin 250mg', icon: Pill, path: '/app/products?q=amoxicillin', section: 'Products', permission: 'medicine:view' },
+  { label: 'Ibuprofen 400mg', icon: Pill, path: '/app/products?q=ibuprofen', section: 'Products', permission: 'medicine:view' },
+  { label: 'Omeprazole 20mg', icon: Pill, path: '/app/products?q=omeprazole', section: 'Products', permission: 'medicine:view' },
 ]
 
 const allItems = [...navigationItems, ...medicineQuickAccess]
@@ -49,21 +43,30 @@ function useDebounce(value, delay) {
 
 export function CommandPalette() {
   const { setCommandPaletteOpen } = useUIStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
   const inputRef = useRef(null)
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const debouncedQuery = useDebounce(query, 300)
 
+  function canAccess(item) {
+    if (!user) return false
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return true
+    if (!item.permission) return true
+    return (user.permissions || []).includes('*') || (user.permissions || []).includes(item.permission)
+  }
+
   const filteredItems = useMemo(() => {
-    if (!debouncedQuery.trim()) return allItems
+    const visible = allItems.filter(canAccess)
+    if (!debouncedQuery.trim()) return visible
     const q = debouncedQuery.toLowerCase()
-    return allItems.filter(
+    return visible.filter(
       (item) =>
         item.label.toLowerCase().includes(q) ||
         item.section.toLowerCase().includes(q)
     )
-  }, [debouncedQuery])
+  }, [debouncedQuery, user])
 
   useEffect(() => {
     setSelectedIndex(0)

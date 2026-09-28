@@ -9,8 +9,9 @@ import * as authRepository from './auth.repository.js';
 import { createAuditLog } from '../../middlewares/auditLogger.js';
 import { UnauthorizedError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../utils/errors.js';
 import { ROLES, AUDIT_ACTION, AUDIT_ENTITY, INVITATION_TTL_HOURS, INVITATION_STATUS } from '../../constants.js';
-import { mapUser, mapUserSummary, mapRole, mapPatientSettings } from '../../utils/serializers.js';
+import { mapUser, mapUserSummary, mapPatientSettings } from '../../utils/serializers.js';
 import { cacheRemember, cacheGet, cacheSet, cacheDelKey } from '../../services/redis.service.js';
+import { SYSTEM_ROLES, isCatalogPermission, PERMISSION_CATALOG } from '../../permissions.js';
 import { verifyTotp, hashBackupCode, generateSecret, generateBackupCodes } from '../../services/totp.service.js';
 import { sendVerificationEmail } from '../../services/mail.service.js';
 
@@ -80,6 +81,31 @@ function sanitizeUser(user) {
   return mapUser(safe);
 }
 
+// Effective RBAC permissions for a user's role. ADMIN / SUPER_ADMIN are
+// granted the wildcard "*". Every other role reads its grants from the
+// role_permissions table (the runtime store for the Roles manager).
+async function getEffectivePermissions(role) {
+  if (role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN) {
+    return ['*'];
+  }
+  const rows = await authRepository.getRolePermissions(role);
+  return rows.map((row) => row.permission);
+}
+
+async function buildSessionUser(user) {
+  const safe = sanitizeUser(user);
+  safe.permissions = await getEffectivePermissions(user.role);
+  return safe;
+}
+
+async function assertRoleExists(role) {
+  const existing = await authRepository.findRole(role);
+  if (!existing) {
+    throw new ValidationError(`Unknown role: ${role}. Create it in Team > Roles & Permissions first.`);
+  }
+  return existing;
+}
+
 function getFullName(userData) {
   return userData.fullName || userData.name || '';
 }
@@ -118,7 +144,7 @@ export async function login(email, password, ipAddress, userAgent) {
   await persistRefreshSession(user, refreshTokenHash);
 
   return {
-    user: sanitizeUser(user),
+    user: await buildSessionUser(user),
     accessToken: generateAccessToken(user),
     refreshToken,
   };
@@ -222,7 +248,7 @@ export async function registerPatient(userData, ipAddress, userAgent) {
   await persistRefreshSession(user, refreshTokenHash);
 
   return {
-    user: sanitizeUser(user),
+    user: await buildSessionUser(user),
     accessToken: generateAccessToken(user),
     refreshToken,
   };
@@ -318,7 +344,7 @@ export async function googleSignIn(idToken, ipAddress, userAgent) {
   await persistRefreshSession(user, refreshTokenHash);
 
   return {
-    user: sanitizeUser(user),
+    user: await buildSessionUser(user),
     accessToken: generateAccessToken(user),
     refreshToken,
   };
@@ -374,9 +400,9 @@ export async function verifyEmail(token, ipAddress, userAgent) {
   await authRepository.updateRefreshToken(user.id, refreshTokenHash);
   await persistRefreshSession(verified, refreshTokenHash);
 
-  return {
-    user: sanitizeUser(verified),
-    accessToken: generateAccessToken(verified),
+return {
+    user: await buildSessionUser(user),
+    accessToken: generateAccessToken(user),
     refreshToken,
   };
 }
@@ -405,7 +431,7 @@ export async function refreshTokens(refreshToken, _ipAddress, _userAgent) {
   await persistRefreshSession(user, newRefreshTokenHash);
 
   return {
-    user: sanitizeUser(user),
+    user: await buildSessionUser(user),
     accessToken: generateAccessToken(user),
     refreshToken: newRefreshToken,
   };
@@ -503,7 +529,7 @@ export async function verifyTwoFactorLogin(tempToken, code, ipAddress, userAgent
   });
 
   return {
-    user: sanitizeUser(user),
+    user: await buildSessionUser(user),
     accessToken: generateAccessToken(user),
     refreshToken,
   };
@@ -596,7 +622,7 @@ export async function changePassword(userId, currentPassword, newPassword, ipAdd
 
 export async function getProfile(userId) {
   const user = await authRepository.findById(userId);
-  return sanitizeUser(user);
+  return buildSessionUser(user);
 }
 
 export async function getPatientProfile(userId) {
@@ -688,8 +714,8 @@ export async function updatePatientSettings(userId, data, ipAddress, userAgent) 
   return mapPatientSettings(updated);
 }
 
-export async function listUsers(page, limit, role, isActive) {
-  const result = await authRepository.listUsers({ page, limit, role, isActive });
+export async function listUsers(page, limit, role, isActive, search) {
+  const result = await authRepository.listUsers({ page, limit, role, isActive, search });
   return {
     data: result.data.map((user) => mapUserSummary(user)),
     meta: result.meta,
@@ -697,16 +723,121 @@ export async function listUsers(page, limit, role, isActive) {
 }
 
 export async function getRoles() {
-  return cacheRemember('auth:roles', 3600, async () => {
-    const roles = await authRepository.listRoles();
-    return roles.map((role) => mapRole(role));
+  const roles = await cacheRemember('auth:roles', 3600, () => authRepository.listRolesDetailed());
+  return { roles, catalog: PERMISSION_CATALOG };
+}
+
+function validateRolePermissions(permissions) {
+  if (!permissions || permissions.length === 0) return [];
+  for (const permission of permissions) {
+    if (permission === '*') {
+      throw new ValidationError("The wildcard '*' permission is reserved for ADMIN / SUPER_ADMIN roles");
+    }
+    if (!isCatalogPermission(permission)) {
+      throw new ValidationError(`Unknown permission: ${permission}`);
+    }
+  }
+  return permissions;
+}
+
+export async function createRole({ name, description, permissions }, actorId, ipAddress, userAgent) {
+  if (SYSTEM_ROLES.includes(name)) {
+    throw new ConflictError(`'${name}' is a built-in role and cannot be recreated`);
+  }
+  const existing = await authRepository.findRole(name);
+  if (existing) throw new ConflictError(`Role '${name}' already exists`);
+
+  const safePermissions = validateRolePermissions(permissions);
+
+  const role = await authRepository.createRole({ name, description, permissions: safePermissions });
+
+  await createAuditLog({
+    userId: actorId,
+    action: AUDIT_ACTION.CREATE,
+    entity: AUDIT_ENTITY.ROLE,
+    entityId: name,
+    description: `Created role ${name} (${safePermissions.length} permissions)`,
+    metadata: { permissions: safePermissions },
+    ipAddress,
+    userAgent,
   });
+
+  await cacheDelKey('auth:roles');
+  return role;
+}
+
+export async function updateRole(name, { description, permissions }, actorId, ipAddress, userAgent) {
+  const existing = await authRepository.findRole(name);
+  if (!existing) throw new NotFoundError('Role', name);
+
+  const changes = {};
+  if (description !== undefined) {
+    changes.description = description;
+  }
+  if (permissions !== undefined) {
+    const safePermissions = existing.is_system && (name === 'ADMIN' || name === 'SUPER_ADMIN')
+      ? permissions
+      : validateRolePermissions(permissions);
+    await authRepository.replaceRolePermissions(name, safePermissions);
+    changes.permissions = safePermissions;
+  }
+
+  let role = existing;
+  if (description !== undefined) {
+    role = await authRepository.updateRoleInfo(name, description);
+  }
+
+  await createAuditLog({
+    userId: actorId,
+    action: AUDIT_ACTION.UPDATE,
+    entity: AUDIT_ENTITY.ROLE,
+    entityId: name,
+    description: `Updated role ${name}`,
+    metadata: changes,
+    ipAddress,
+    userAgent,
+  });
+
+  await cacheDelKey('auth:roles');
+  return role;
+}
+
+export async function deleteRole(name, actorId, ipAddress, userAgent) {
+  const existing = await authRepository.findRole(name);
+  if (!existing) throw new NotFoundError('Role', name);
+  if (existing.is_system) {
+    throw new ForbiddenError(`'${name}' is a built-in role and cannot be deleted`);
+  }
+
+  const assignedUsers = await authRepository.countUsersByRole(name);
+  if (assignedUsers > 0) {
+    throw new ConflictError(
+      `Role '${name}' is still assigned to ${assignedUsers} user${assignedUsers === 1 ? '' : 's'}. Reassign them first.`
+    );
+  }
+
+  await authRepository.deleteRole(name);
+
+  await createAuditLog({
+    userId: actorId,
+    action: AUDIT_ACTION.DELETE,
+    entity: AUDIT_ENTITY.ROLE,
+    entityId: name,
+    description: `Deleted role ${name}`,
+    ipAddress,
+    userAgent,
+  });
+
+  await cacheDelKey('auth:roles');
+  return { deleted: true };
 }
 
 export async function createUser(userData, ipAddress, userAgent) {
   const normalizedEmail = userData.email.trim().toLowerCase();
   const existing = await authRepository.findByEmail(normalizedEmail);
   if (existing) throw new ConflictError('Email already registered');
+
+  await assertRoleExists(userData.role);
 
   const passwordHash = await bcrypt.hash(userData.password, 10);
   const fullName = getFullName(userData);
@@ -740,6 +871,8 @@ export async function updateUserRole(userId, role, actorId, ipAddress, userAgent
   if (user.role === ROLES.SUPER_ADMIN) {
     throw new ForbiddenError('Super admin accounts cannot be modified');
   }
+
+  await assertRoleExists(role);
 
   const updated = await authRepository.updateRole(userId, role);
 
@@ -780,6 +913,42 @@ export async function updateUserActiveStatus(userId, isActive, actorId, ipAddres
   return sanitizeUser(updated);
 }
 
+export async function deleteUser(userId, actorId, ipAddress, userAgent) {
+  const user = await authRepository.findById(userId);
+  if (!user) throw new NotFoundError('User', userId);
+  if (user.role === ROLES.SUPER_ADMIN) {
+    throw new ForbiddenError('Super admin accounts cannot be deleted');
+  }
+  if (userId === actorId) {
+    throw new ForbiddenError('You cannot delete your own account');
+  }
+
+  let deleted;
+  try {
+    deleted = await authRepository.deleteUser(userId);
+  } catch (error) {
+    if (error?.code === '23503') {
+      throw new ConflictError(
+        'This member has sales, prescriptions, stock movements, or other records. Deactivate their account instead of deleting it.'
+      );
+    }
+    throw error;
+  }
+  if (!deleted) throw new NotFoundError('User', userId);
+
+  await createAuditLog({
+    userId: actorId,
+    action: AUDIT_ACTION.DELETE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: userId,
+    description: `Deleted user ${deleted.email}`,
+    ipAddress,
+    userAgent,
+  });
+
+  return { id: deleted.id, email: deleted.email };
+}
+
 function serializeInvitation(invitation) {
   if (!invitation) return null;
   const safe = { ...invitation };
@@ -789,6 +958,8 @@ function serializeInvitation(invitation) {
 
 export async function createInvitation(inviteData, actorId, ipAddress, userAgent) {
   const { email, role, fullName } = inviteData;
+
+  await assertRoleExists(role);
 
   const existingUser = await authRepository.findByEmail(email.trim().toLowerCase());
   if (existingUser) throw new ConflictError('A user with that email already exists');
@@ -840,6 +1011,13 @@ export async function acceptInvitation(token, userData, ipAddress, userAgent) {
   if (new Date(invitation.expires_at) < new Date()) {
     await authRepository.markInvitationExpired(invitation.id);
     throw new ConflictError('Invitation has expired. Contact your administrator for a new one.');
+  }
+
+  const invitedRole = await authRepository.findRole(invitation.role);
+  if (!invitedRole) {
+    throw new ConflictError(
+      `The role '${invitation.role}' no longer exists. Contact your administrator for a new invitation.`
+    );
   }
 
   const existing = await authRepository.findByEmail(invitation.email);

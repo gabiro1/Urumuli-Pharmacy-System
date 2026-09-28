@@ -12,7 +12,8 @@ const prescriptionFields = `
   p.uploaded_by,
   CONCAT(uploader.first_name, ' ', uploader.last_name) as uploaded_by_name,
   p.expires_at,
-  p.created_at, p.updated_at
+  p.created_at, p.updated_at,
+  (SELECT COUNT(*)::int FROM prescription_items pi WHERE pi.prescription_id = p.id) AS medicine_count
 `;
 
 export async function findById(id) {

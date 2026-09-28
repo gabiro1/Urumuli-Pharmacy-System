@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const staffRoleSchema = z.enum(['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER', 'INVENTORY_MANAGER', 'AUDITOR']);const emptyStringToUndefined = (value) => {
+const emptyStringToUndefined = (value) => {
   if (typeof value !== 'string') return value;
 
   const trimmed = value.trim();
@@ -9,6 +9,28 @@ const staffRoleSchema = z.enum(['ADMIN', 'MANAGER', 'PHARMACIST', 'CASHIER', 'IN
 
 const optionalPhoneSchema = (schema) =>
   z.preprocess(emptyStringToUndefined, schema.optional());
+
+// Roles are dynamic (stored in the `roles` table, user-managed), so we no
+// longer validate against a hard-coded enum. Structural rules only; the
+// service layer confirms the role actually exists in the database.
+const roleNameSchema = z.string()
+  .trim()
+  .min(2, 'Role name must be at least 2 characters')
+  .max(50, 'Role name must be at most 50 characters')
+  .regex(/^[A-Z][A-Z0-9_]*$/, 'Role name must be UPPERCASE letters, numbers, or underscores (e.g. STORE_MANAGER)');
+
+export const createRoleSchema = z.object({
+  name: roleNameSchema,
+  description: z.string().trim().max(300, 'Description must be at most 300 characters').optional(),
+  permissions: z.array(z.string().trim().min(1)).max(100).optional(),
+});
+
+export const updateRoleSchema = z.object({
+  description: z.string().trim().max(300, 'Description must be at most 300 characters').optional(),
+  permissions: z.array(z.string().trim().min(1)).max(100).optional(),
+}).refine((data) => data.description !== undefined || data.permissions !== undefined, {
+  message: 'Nothing to update',
+});
 
 export const loginSchema = z.object({
   email: z.string().trim().email('Invalid email format'),
@@ -77,19 +99,19 @@ export const createUserSchema = z.object({
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
   phone: z.preprocess(emptyStringToUndefined, z.string().optional()),
-  role: staffRoleSchema,
+  role: roleNameSchema,
 }).refine((data) => data.fullName || data.name, {
   message: 'Full name is required',
   path: ['fullName'],
 });
 
 export const updateUserRoleSchema = z.object({
-  role: staffRoleSchema,
+  role: roleNameSchema,
 });
 
 export const inviteStaffSchema = z.object({
   email: z.string().trim().email('Invalid email format'),
-  role: staffRoleSchema,
+  role: roleNameSchema,
   fullName: z.string().trim().min(2, 'Full name is required').max(200).optional(),
 });
 

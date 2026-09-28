@@ -49,6 +49,10 @@ app.use('/uploads/profile-avatars', express.static(path.resolve(env.UPLOAD_DIR, 
   index: false,
   maxAge: '1h',
 }));
+app.use('/uploads/partners', express.static(path.resolve(env.UPLOAD_DIR, 'partners'), {
+  index: false,
+  maxAge: '1d',
+}));
 app.use(globalLimiter);
 
 app.use('/api/v1', routes);

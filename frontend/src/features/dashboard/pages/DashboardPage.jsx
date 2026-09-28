@@ -6,11 +6,10 @@ import {
   MessageSquare,
   Clock,
   CheckCircle,
-  AlertCircle,
+  AlarmClock,
   ArrowRight,
-  Pill,
   Activity,
-  Users,
+  TrendingUp,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -23,8 +22,9 @@ import {
   AreaChart,
   Area,
 } from 'recharts'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, formatCurrency } from '@/lib/utils'
 import api from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,7 +32,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import StatsCard from '@/components/shared/StatsCard'
-import DashboardHero from '@/components/blocks/DashboardHero'
 
 const containerVariants = {
   hidden: {},
@@ -44,8 +43,6 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
 }
 
-const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
 function getStatusColor(status) {
   const colors = {
     PENDING: 'yellow',
@@ -55,6 +52,13 @@ function getStatusColor(status) {
     REJECTED: 'red',
   }
   return colors[status] || 'default'
+}
+
+function shortDate(day) {
+  if (!day) return ''
+  const d = new Date(`${day}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return day
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
 function RecentPrescriptions({ prescriptions }) {
@@ -106,7 +110,7 @@ function RecentPrescriptions({ prescriptions }) {
 
   return (
     <motion.div variants={itemVariants}>
-      <Card className="hover:shadow-md transition-shadow duration-300">
+      <Card className="hover:shadow-md transition-shadow duration-300 h-full">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="w-4 h-4 text-muted-foreground" />
@@ -185,30 +189,9 @@ function RecentConversations({ conversations }) {
     )
   }
 
-  if (conversations.length === 0) {
-    return (
-      <motion.div variants={itemVariants}>
-        <Card className="hover:shadow-md transition-shadow duration-300">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-muted-foreground" />
-              Active Conversations
-            </CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/app/inbox')}>
-              View all <ArrowRight className="w-3 h-3 ml-1" />
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground text-center py-6">No active conversations</p>
-          </CardContent>
-        </Card>
-      </motion.div>
-    )
-  }
-
   return (
     <motion.div variants={itemVariants}>
-      <Card className="hover:shadow-md transition-shadow duration-300">
+      <Card className="hover:shadow-md transition-shadow duration-300 h-full">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-muted-foreground" />
@@ -219,39 +202,43 @@ function RecentConversations({ conversations }) {
           </Button>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="max-h-[340px]">
-            <div className="space-y-1">
-              {conversations.map((conv, i) => (
-                <motion.div
-                  key={conv.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: i * 0.06 }}
-                  className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/app/inbox/${conv.id}`)}
-                >
-                  <div className="p-2 rounded-full bg-primary/10 dark:bg-white/10">
-                    <MessageSquare className="w-4 h-4 text-primary dark:text-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{conv.subject}</p>
-                    <p className="text-xs text-muted-foreground">{conv.patientName}</p>
-                  </div>
-                  <Badge
-                    color={
-                      conv.status === 'WAITING_PHARMACIST'
-                        ? 'yellow'
-                        : conv.status === 'OPEN'
-                          ? 'blue'
-                          : 'default'
-                    }
+          {conversations.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No active conversations</p>
+          ) : (
+            <ScrollArea className="max-h-[340px]">
+              <div className="space-y-1">
+                {conversations.map((conv, i) => (
+                  <motion.div
+                    key={conv.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: i * 0.06 }}
+                    className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => navigate(`/app/inbox/${conv.id}`)}
                   >
-                    {conv.status?.replace('_', ' ')}
-                  </Badge>
-                </motion.div>
-              ))}
-            </div>
-          </ScrollArea>
+                    <div className="p-2 rounded-full bg-primary/10 dark:bg-white/10">
+                      <MessageSquare className="w-4 h-4 text-primary dark:text-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{conv.subject}</p>
+                      <p className="text-xs text-muted-foreground">{conv.patientName}</p>
+                    </div>
+                    <Badge
+                      color={
+                        conv.status === 'WAITING_PHARMACIST'
+                          ? 'yellow'
+                          : conv.status === 'OPEN'
+                            ? 'blue'
+                            : 'default'
+                      }
+                    >
+                      {conv.status?.replace('_', ' ')}
+                    </Badge>
+                  </motion.div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
         </CardContent>
       </Card>
     </motion.div>
@@ -259,6 +246,9 @@ function RecentConversations({ conversations }) {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuthStore()
+  const canSeePatientCare = user?.role === 'PHARMACIST' || user?.role === 'SUPER_ADMIN'
+
   const { data: overviewData, isLoading: overviewLoading } = useQuery({
     queryKey: ['dashboard-overview'],
     queryFn: () => api.get('/analytics/overview?days=30').then((r) => r.data),
@@ -272,12 +262,13 @@ export default function DashboardPage() {
   const { data: inboxData, isLoading: inboxLoading } = useQuery({
     queryKey: ['dashboard-inbox'],
     queryFn: () => api.get('/chat/inbox?limit=5').then((r) => r.data),
+    enabled: canSeePatientCare,
   })
 
   const overview = overviewData?.data || {}
   const prescriptions = prescriptionsData?.data || []
   const inbox = inboxData?.data?.data || []
-  const isLoading = overviewLoading || rxLoading || inboxLoading
+  const isLoading = overviewLoading || rxLoading || (canSeePatientCare ? inboxLoading : false)
   const hasData = !isLoading
 
   const stats = {
@@ -287,6 +278,8 @@ export default function DashboardPage() {
     conversations: inbox.length,
   }
 
+  const pendingAvailability = overview.availability?.pending || 0
+
   const barChartData = [
     { name: 'Pending', value: overview.prescriptions?.pending || 0 },
     { name: 'Review', value: overview.prescriptions?.underReview || 0 },
@@ -295,15 +288,11 @@ export default function DashboardPage() {
     { name: 'Rejected', value: overview.prescriptions?.rejected || 0 },
   ].filter((d) => d.value > 0)
 
-  const dayCounts = Array(7).fill(0)
-  prescriptions.forEach((rx) => {
-    if (rx.createdAt) {
-      const day = new Date(rx.createdAt).getDay()
-      dayCounts[day]++
-    }
-  })
-  const lineChartData = dayNames.map((name, i) => ({ name, value: dayCounts[i] }))
-  const hasLineData = lineChartData.some((d) => d.value > 0)
+  const revenueChartData = (overview.profit?.daily || []).map((d) => ({
+    name: shortDate(d.day),
+    value: Math.round(Number(d.revenue) || 0),
+  }))
+  const hasRevenueData = revenueChartData.length > 0
 
   return (
     <motion.div
@@ -312,17 +301,7 @@ export default function DashboardPage() {
       animate="show"
       className="space-y-6"
     >
-      {/* Hero */}
-      <motion.div variants={itemVariants}>
-        <DashboardHero
-          overview={overview}
-          prescriptions={prescriptions}
-          inbox={inbox}
-          loading={isLoading}
-        />
-      </motion.div>
-
-      {/* Stats Row */}
+      {/* Key Stats Row */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           icon={FileText}
@@ -351,12 +330,14 @@ export default function DashboardPage() {
           tooltip="Prescriptions approved and ready for dispensing"
         />
         <StatsCard
-          icon={MessageSquare}
-          label="Active Conversations"
-          value={stats.conversations}
+          icon={AlarmClock}
+          label="Availability Requests"
+          value={pendingAvailability}
+          sub={pendingAvailability > 0 ? 'Pending patient requests' : 'All clear'}
           variant="info"
-          sub={stats.conversations > 0 ? `${inbox.filter((c) => c.status === 'WAITING_PHARMACIST').length || 0} need reply` : 'All caught up'}
-          tooltip="Open conversations with patients"
+          progress={pendingAvailability}
+          progressMax={Math.max(stats.conversations + pendingAvailability, 1)}
+          tooltip="Medicine availability requests waiting to be answered"
         />
       </motion.div>
 
@@ -403,24 +384,24 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Line Chart */}
+          {/* Revenue Trend */}
           <Card className="hover:shadow-md transition-shadow duration-300">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <Activity className="w-4 h-4 text-muted-foreground" />
-                Weekly Activity
+                <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                Revenue Trend (30 days)
               </CardTitle>
             </CardHeader>
             <CardContent className="h-[260px]">
-              {!hasLineData ? (
+              {!hasRevenueData ? (
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  No recent activity data
+                  No revenue data available
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={lineChartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                  <AreaChart data={revenueChartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="activityGrad" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.25" />
                         <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
                       </linearGradient>
@@ -435,13 +416,14 @@ export default function DashboardPage() {
                         borderRadius: '8px',
                         fontSize: '13px',
                       }}
+                      formatter={(value) => formatCurrency(value)}
                     />
                     <Area
                       type="monotone"
                       dataKey="value"
                       stroke="hsl(var(--primary))"
                       strokeWidth={2}
-                      fill="url(#activityGrad)"
+                      fill="url(#revenueGrad)"
                       animationDuration={1400}
                       animationEasing="ease-out"
                     />
@@ -456,7 +438,7 @@ export default function DashboardPage() {
       {/* Lists Row */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <RecentPrescriptions prescriptions={prescriptionsData?.data} />
-        <RecentConversations conversations={inboxData?.data} />
+        {canSeePatientCare && <RecentConversations conversations={inboxData?.data} />}
       </motion.div>
     </motion.div>
   )
