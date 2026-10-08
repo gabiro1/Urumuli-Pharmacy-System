@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Activity,
   TrendingUp,
+  Truck,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -245,9 +246,124 @@ function RecentConversations({ conversations }) {
   )
 }
 
+const DELIVERY_STATUS_LABEL = {
+  PENDING: 'Awaiting dispatch',
+  PICKED_UP: 'Collected',
+  IN_TRANSIT: 'In transit',
+  OUT_FOR_DELIVERY: 'Out for delivery',
+  DELIVERED: 'Delivered',
+  FAILED: 'Failed attempt',
+  RETURNED: 'Returned',
+  CANCELLED: 'Cancelled',
+}
+
+const DELIVERY_STATUS_COLOR = {
+  PENDING: 'yellow',
+  PICKED_UP: 'blue',
+  IN_TRANSIT: 'blue',
+  OUT_FOR_DELIVERY: 'purple',
+  DELIVERED: 'green',
+  FAILED: 'red',
+  RETURNED: 'orange',
+  CANCELLED: 'default',
+}
+
+function DeliveryAttention({ deliveries, stats }) {
+  const navigate = useNavigate()
+
+  if (!deliveries) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-8 w-20 rounded-md" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <div className="flex-1 space-y-1">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const needsAttention = (stats?.needs_attention ?? 0) + (stats?.overdue ?? 0)
+
+  return (
+    <motion.div variants={itemVariants}>
+      <Card className="hover:shadow-md transition-shadow duration-300 h-full">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Truck className="w-4 h-4 text-muted-foreground" />
+            Deliveries
+            {needsAttention > 0 && <Badge color="red" className="ml-1">{needsAttention} need attention</Badge>}
+          </CardTitle>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/app/deliveries')}>
+            View all <ArrowRight className="w-3 h-3 ml-1" />
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {deliveries.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No deliveries waiting</p>
+          ) : (
+            <>
+              <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+                {[
+                  { label: 'Out', value: stats?.out_for_delivery ?? 0 },
+                  { label: 'Done today', value: stats?.delivered_today ?? 0 },
+                  { label: 'Failed', value: stats?.needs_attention ?? 0 },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-lg bg-muted/50 px-2 py-1.5">
+                    <p className="text-lg font-bold tabular-nums leading-none">{item.value}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+              <ScrollArea className="max-h-[248px]">
+                <div className="space-y-1">
+                  {deliveries.map((row, i) => (
+                    <motion.div
+                      key={row.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: i * 0.06 }}
+                      className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                      onClick={() => navigate('/app/deliveries')}
+                    >
+                      <div className="p-2 rounded-full bg-primary/10 dark:bg-white/10">
+                        <Truck className="w-4 h-4 text-primary dark:text-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{row.patient_name || 'Unknown customer'}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{row.public_reference}</p>
+                      </div>
+                      <Badge color={DELIVERY_STATUS_COLOR[row.status] || 'default'}>
+                        {DELIVERY_STATUS_LABEL[row.status] || row.status}
+                      </Badge>
+                    </motion.div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
+
 export default function DashboardPage() {
-  const { user } = useAuthStore()
+  const { user, hasPermission } = useAuthStore()
   const canSeePatientCare = user?.role === 'PHARMACIST' || user?.role === 'SUPER_ADMIN'
+  const canSeeDeliveries = hasPermission('delivery:view')
 
   const { data: overviewData, isLoading: overviewLoading } = useQuery({
     queryKey: ['dashboard-overview'],
@@ -263,6 +379,19 @@ export default function DashboardPage() {
     queryKey: ['dashboard-inbox'],
     queryFn: () => api.get('/chat/inbox?limit=5').then((r) => r.data),
     enabled: canSeePatientCare,
+  })
+
+  const { data: deliveriesData } = useQuery({
+    queryKey: ['dashboard-deliveries'],
+    queryFn: () =>
+      api.get('/delivery?scope=open&limit=5').then((r) => ({ list: r.data.data || [], stats: null })),
+    enabled: canSeeDeliveries,
+  })
+
+  const { data: deliveryStatsData } = useQuery({
+    queryKey: ['delivery-stats'],
+    queryFn: () => api.get('/delivery/stats').then((r) => r.data.data),
+    enabled: canSeeDeliveries,
   })
 
   const overview = overviewData?.data || {}
@@ -440,6 +569,12 @@ export default function DashboardPage() {
         <RecentPrescriptions prescriptions={prescriptionsData?.data} />
         {canSeePatientCare && <RecentConversations conversations={inboxData?.data} />}
       </motion.div>
+
+      {canSeeDeliveries && (
+        <motion.div variants={itemVariants} className="grid grid-cols-1 gap-6">
+          <DeliveryAttention deliveries={deliveriesData?.list} stats={deliveryStatsData} />
+        </motion.div>
+      )}
     </motion.div>
   )
 }

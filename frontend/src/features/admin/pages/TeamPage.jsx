@@ -191,9 +191,12 @@ function InviteStaffDialog({ open, onOpenChange, roles }) {
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       queryClient.invalidateQueries({ queryKey: ['admin-invitations'] })
-      const inviteUrl = response?.data?.data?.inviteUrl
-      if (inviteUrl) {
-        toast.success('Invitation created — link copied to clipboard')
+      const data = response?.data?.data
+      const inviteUrl = data?.inviteUrl
+      if (data?.emailSent) {
+        toast.success(`Invitation email sent to ${data.email}`)
+      } else if (inviteUrl) {
+        toast.warning('Invitation created, but the email could not be sent — link copied to clipboard')
         navigator.clipboard?.writeText(inviteUrl).catch(() => {})
       } else {
         toast.success('Invitation created successfully')
@@ -734,6 +737,7 @@ export default function TeamPage() {
   const [roleTarget, setRoleTarget] = useState(null)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
   const [removeTarget, setRemoveTarget] = useState(null)
+  const [deleteInviteTarget, setDeleteInviteTarget] = useState(null)
 
   const rolesQuery = useQuery({
     queryKey: ['admin-roles'],
@@ -814,9 +818,12 @@ export default function TeamPage() {
     mutationFn: (id) => api.post(`/auth/invitations/${id}/resend`),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['admin-invitations'] })
-      const inviteUrl = response?.data?.data?.inviteUrl
-      if (inviteUrl) {
-        toast.success('Invitation resent — link copied to clipboard')
+      const data = response?.data?.data
+      const inviteUrl = data?.inviteUrl
+      if (data?.emailSent) {
+        toast.success(`Invitation email sent to ${data.email}`)
+      } else if (inviteUrl) {
+        toast.warning('Invitation resent, but the email could not be sent — link copied to clipboard')
         navigator.clipboard?.writeText(inviteUrl).catch(() => {})
       } else {
         toast.success('Invitation resent successfully')
@@ -832,6 +839,16 @@ export default function TeamPage() {
       toast.success('Invitation revoked')
     },
     onError: (err) => toast.error(getApiErrorMessage(err, 'Failed to revoke invitation')),
+  })
+
+  const deleteInviteMutation = useMutation({
+    mutationFn: (id) => api.delete(`/auth/invitations/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-invitations'] })
+      toast.success('Invitation deleted')
+      setDeleteInviteTarget(null)
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err, 'Failed to delete invitation')),
   })
 
   const deactivateMutation = useMutation({
@@ -1144,6 +1161,15 @@ export default function TeamPage() {
                         {inv.full_name && (
                           <p className="text-xs text-muted-foreground">{inv.full_name}</p>
                         )}
+                        {inv.email_sent_at ? (
+                          <p className="text-xs text-muted-foreground">
+                            Email sent {formatDate(inv.email_sent_at)}
+                          </p>
+                        ) : inv.last_email_error ? (
+                          <p className="text-xs text-destructive" title={inv.last_email_error}>
+                            Email not delivered
+                          </p>
+                        ) : null}
                       </TableCell>
                       <TableCell>
                             <RoleBadge role={inv.role} roles={roles} />
@@ -1180,6 +1206,18 @@ export default function TeamPage() {
                             >
                               <Ban className="w-3.5 h-3.5 mr-1" />
                               Revoke
+                            </Button>
+                          )}
+                          {inv.status !== 'PENDING' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Delete invitation"
+                              className="text-muted-foreground hover:text-destructive"
+                              disabled={deleteInviteMutation.isPending}
+                              onClick={() => setDeleteInviteTarget(inv)}
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           )}
                         </div>
@@ -1269,6 +1307,38 @@ export default function TeamPage() {
                 <Trash2 className="w-4 h-4 mr-2" />
               )}
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!deleteInviteTarget} onOpenChange={(open) => !open && setDeleteInviteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-destructive" />
+              Delete Invitation
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently delete the {deleteInviteTarget?.status?.toLowerCase()} invitation for{' '}
+              <span className="font-medium text-foreground">
+                {deleteInviteTarget?.email}
+              </span>
+              ? This removes the record from the list. If the invitation was never accepted,
+              its link will stop working. Existing staff accounts are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteInviteMutation.mutate(deleteInviteTarget?.id)}
+            >
+              {deleteInviteMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4 mr-2" />
+              )}
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

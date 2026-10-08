@@ -416,7 +416,7 @@ INSERT INTO translations (locale, translation_key, translation_value) VALUES
 ('en', 'app.refill.reminder', 'Time to refill your medication'),
 ('en', 'app.expiry.warning', 'Medicine expiring soon'),
 ('en', 'patient.login', 'Patient Login'),
-('en', 'patient.register', 'Create Patient Account'),
+('en', 'patient.register', 'Create Account'),
 ('en', 'patient.dashboard', 'Patient Dashboard'),
 ('en', 'patient.medications', 'My Medications'),
 ('en', 'patient.orders', 'My Orders'),

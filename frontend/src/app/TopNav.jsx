@@ -38,6 +38,7 @@ const routeLabels = {
   search: 'Search',
   analytics: 'Analytics',
   staff: 'Team',
+  deliveries: 'Deliveries',
 }
 
 function Breadcrumbs() {

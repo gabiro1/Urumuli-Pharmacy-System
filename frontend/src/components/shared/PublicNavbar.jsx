@@ -12,7 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Menu, X, User, MessageSquare, FileText, Package, Settings2, LogOut } from 'lucide-react'
+import { Menu, X, User, MessageSquare, FileText, Package, Settings2, LogOut, LayoutDashboard } from 'lucide-react'
 import { usePatientAuthStore } from '@/stores/patientAuthStore'
 import { getMediaUrl } from '@/lib/media'
 
@@ -74,6 +74,13 @@ const navItems = [
   { label: 'Contact', path: '/contact' },
 ]
 
+const patientNavItems = [
+  { label: 'Dashboard', path: '/patient' },
+  { label: 'Orders', path: '/patient/orders' },
+  { label: 'Prescriptions', path: '/patient/prescriptions' },
+  { label: 'Messages', path: '/patient/messages' },
+]
+
 function PublicNavbar({ alwaysSolid = false }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -116,12 +123,18 @@ function PublicNavbar({ alwaysSolid = false }) {
     }
   }, [mobileOpen])
 
-  const isActive = (path) => location.pathname === path
+  const isActive = (path) =>
+    path === '/patient'
+      ? location.pathname === '/patient'
+      : location.pathname === path || location.pathname.startsWith(`${path}/`)
   const navLinkClass = (path) => `relative px-3 py-2 text-sm font-medium transition-colors duration-300 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-center after:rounded-full after:bg-primary after:transition-transform after:duration-300 after:ease-out ${
     isActive(path)
       ? 'text-foreground after:scale-x-100'
       : 'text-muted-foreground hover:text-foreground after:scale-x-0'
   }`
+
+  const activeNavItems =
+    isAuthenticated && location.pathname.startsWith('/patient') ? patientNavItems : navItems
 
   return (
     <motion.nav
@@ -140,7 +153,7 @@ function PublicNavbar({ alwaysSolid = false }) {
           <div className="flex-1" />
 
           <div className="hidden md:flex items-center gap-2">
-            {navItems.map((item) => (
+            {activeNavItems.map((item) => (
               <Link key={item.path} to={item.path} className={navLinkClass(item.path)}>
                 {item.label}
               </Link>
@@ -176,6 +189,9 @@ function PublicNavbar({ alwaysSolid = false }) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate('/patient')}>
+                    <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate('/patient/orders')}>
                     <Package className="mr-2 h-4 w-4" /> My orders
                   </DropdownMenuItem>
@@ -235,7 +251,7 @@ function PublicNavbar({ alwaysSolid = false }) {
             className="md:hidden overflow-hidden bg-background/95 backdrop-blur-xl"
           >
             <div className="px-4 sm:px-6 pb-6 pt-2 space-y-1">
-              {navItems.map((item) => (
+              {activeNavItems.map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
@@ -251,8 +267,8 @@ function PublicNavbar({ alwaysSolid = false }) {
               <div className="pt-3 sm:hidden">
                 {isAuthenticated ? (
                   <div className="space-y-2">
-                    <Button className="w-full" onClick={() => navigate('/patient/profile')}>
-                      <User className="mr-2 h-4 w-4" /> Open profile
+                    <Button className="w-full" onClick={() => navigate('/patient')}>
+                      <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
                     </Button>
                     <Button variant="outline" className="w-full" onClick={handleLogout}>
                       <LogOut className="mr-2 h-4 w-4" /> Sign out

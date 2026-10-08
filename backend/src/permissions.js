@@ -33,6 +33,8 @@ export const PERMISSION_CATALOG = [
 
   { slug: 'order:view', label: 'View orders', module: 'Operations' },
   { slug: 'order:manage', label: 'Manage orders', module: 'Operations' },
+  { slug: 'delivery:view', label: 'View delivery records', module: 'Operations' },
+  { slug: 'delivery:manage', label: 'Update & confirm deliveries', module: 'Operations' },
   { slug: 'chat:view', label: 'View patient messages', module: 'Operations' },
   { slug: 'availability:view', label: 'View availability requests', module: 'Operations' },
   { slug: 'availability:manage', label: 'Manage availability requests', module: 'Operations' },

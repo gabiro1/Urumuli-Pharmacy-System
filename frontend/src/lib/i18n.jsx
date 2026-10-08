@@ -38,7 +38,7 @@ const translations = {
     'app.insurance': 'Insurance',
     'app.medicationHistory': 'Medication History',
     'patient.login': 'Patient Login',
-    'patient.register': 'Create Patient Account',
+    'patient.register': 'Create Account',
     'patient.dashboard': 'Patient Dashboard',
     'patient.medications': 'My Medications',
     'patient.orders': 'My Orders',

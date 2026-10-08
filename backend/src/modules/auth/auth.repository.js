@@ -36,8 +36,18 @@ export async function createPatientProfile(userId, profileData) {
   return queryOne(
     `INSERT INTO patient_profiles (user_id, date_of_birth, gender, address)
      VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id) DO NOTHING
      RETURNING *`,
     [userId, dateOfBirth || null, gender || null, address || null]
+  );
+}
+
+export async function ensurePatientProfile(userId) {
+  await query(
+    `INSERT INTO patient_profiles (user_id)
+     VALUES ($1)
+     ON CONFLICT (user_id) DO NOTHING`,
+    [userId]
   );
 }
 
@@ -57,6 +67,7 @@ export async function createIdentityForUser(userId, phone, fullName, email) {
 }
 
 export async function getPatientProfile(userId) {
+  await ensurePatientProfile(userId);
   return queryOne(
     `SELECT pp.*, u.email, u.first_name, u.last_name, u.phone, u.avatar, u.created_at
      FROM patient_profiles pp
@@ -75,6 +86,11 @@ export async function updatePatientProfile(userId, data) {
   };
 
   return transaction(async (client) => {
+    await client.query(
+      `INSERT INTO patient_profiles (user_id) VALUES ($1)
+       ON CONFLICT (user_id) DO NOTHING`,
+      [userId]
+    );
     const updateTable = async (table, idColumn, mapping) => {
       const entries = Object.entries(mapping).filter(([key]) => data[key] !== undefined);
       if (!entries.length) return;
@@ -431,6 +447,7 @@ export async function deleteUser(id) {
 const invitationFields = `
   id, email, role, full_name, token_hash, invited_by,
   status, expires_at, accepted_at, revoked_at, accepted_user_id,
+  email_sent_at, last_email_error,
   created_at, updated_at
 `;
 
@@ -547,6 +564,25 @@ export async function expireStaleInvitations() {
     `UPDATE staff_invitations
      SET status = 'EXPIRED', updated_at = NOW()
      WHERE status = 'PENDING' AND expires_at < NOW()`
+  );
+}
+
+export async function recordInvitationEmail(id, { sent, error }) {
+  return queryOne(
+    `UPDATE staff_invitations
+     SET email_sent_at = CASE WHEN $2::boolean THEN NOW() ELSE NULL END,
+         last_email_error = $3,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING ${invitationFields}`,
+    [id, sent, error || null]
+  );
+}
+
+export async function deleteInvitation(id) {
+  return queryOne(
+    `DELETE FROM staff_invitations WHERE id = $1 RETURNING id, status, email`,
+    [id]
   );
 }
 

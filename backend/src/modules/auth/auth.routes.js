@@ -78,5 +78,6 @@ router.post('/invitations', authenticate, authorizeAccess({ roles: [ROLES.SUPER_
 router.post('/invitations/accept', authLimiter, validate(acceptInvitationSchema), authController.acceptInvitation);
 router.patch('/invitations/:id/revoke', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN], permissions: ['team:invite'] }), authController.revokeInvitation);
 router.post('/invitations/:id/resend', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN], permissions: ['team:invite'] }), authController.resendInvitation);
+router.delete('/invitations/:id', authenticate, authorizeAccess({ roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN], permissions: ['team:invite'] }), authController.deleteInvitation);
 
 export default router;

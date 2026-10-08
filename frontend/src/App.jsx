@@ -34,6 +34,7 @@ const EmailVerificationPage = lazy(() => import('@/features/auth/pages/EmailVeri
 const NotFoundPage = lazy(() => import('@/features/not-found/pages/NotFoundPage'))
 
 const PatientRegisterPage = lazy(() => import('@/features/patient/pages/PatientRegisterPage'))
+const PatientDashboardPage = lazy(() => import('@/features/patient/pages/PatientDashboardPage'))
 const MessagesPage = lazy(() => import('@/features/patient/pages/MessagesPage'))
 const PrescriptionsPage = lazy(() => import('@/features/patient/pages/PrescriptionsPage'))
 const MedicinesPage = lazy(() => import('@/features/patient/pages/MedicinesPage'))
@@ -44,6 +45,7 @@ const SettingsPage = lazy(() => import('@/features/patient/pages/SettingsPage'))
 const InboxPage = lazy(() => import('@/features/pharmacist/pages/InboxPage'))
 const OrderQueuePage = lazy(() => import('@/features/pharmacist/pages/OrderQueuePage'))
 const OrderReviewPage = lazy(() => import('@/features/pharmacist/pages/OrderReviewPage'))
+const DeliveriesPage = lazy(() => import('@/features/pharmacist/pages/DeliveryTrackingPage'))
 
 const AboutPage = lazy(() => import('@/features/about/pages/AboutPage'))
 const ServicesPage = lazy(() => import('@/features/services/pages/ServicesPage'))
@@ -133,7 +135,7 @@ export default function App() {
             </PatientProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="profile" replace />} />
+          <Route index element={<PatientDashboardPage />} />
           <Route path="messages" element={<MessagesPage />} />
           <Route path="messages/:id" element={<MessagesPage />} />
           <Route path="prescriptions" element={<PrescriptionsPage />} />
@@ -193,6 +195,7 @@ export default function App() {
           <Route path="contact-inbox" element={<ProtectedRoute allowedPermissions={['feedback:view']}><ContactInboxPage /></ProtectedRoute>} />
           <Route path="orders" element={<ProtectedRoute allowedPermissions={['order:view']} restrictedRoles={['PHARMACIST']}><OrderQueuePage /></ProtectedRoute>} />
           <Route path="orders/:id" element={<ProtectedRoute allowedPermissions={['order:view']} restrictedRoles={['PHARMACIST']}><OrderReviewPage /></ProtectedRoute>} />
+          <Route path="deliveries" element={<ProtectedRoute allowedPermissions={['delivery:view']} restrictedRoles={['CASHIER']}><DeliveriesPage /></ProtectedRoute>} />
           <Route path="telehealth" element={<TelehealthPage />} />
         </Route>
 

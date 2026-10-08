@@ -383,6 +383,20 @@ export async function resendInvitation(req, res, next) {
   }
 }
 
+export async function deleteInvitation(req, res, next) {
+  try {
+    const result = await authService.deleteInvitation(
+      req.params.id,
+      req.user.userId,
+      req.ip,
+      req.get('User-Agent')
+    );
+    return sendSuccess(res, result, 'Invitation deleted');
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function googleSignIn(req, res, next) {
   try {
     const { idToken } = req.body;

@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Building2,
   Users,
+  Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
@@ -35,12 +36,14 @@ const navSections = [
   },
 
   {
+    // Gated per item below: Inbox and Medicine Requests are pharmacist-only,
+    // Deliveries is open to any role holding delivery:view.
     label: 'Patient Care',
-    roles: ['PHARMACIST'],
-    permissions: ['chat:view', 'order:view'],
+    permissions: ['chat:view', 'order:view', 'delivery:view'],
     items: [
       { label: 'Inbox', icon: MessageSquare, path: '/app/inbox', roles: ['PHARMACIST'] },
       { label: 'Medicine Requests', icon: ShoppingCart, path: '/app/orders', roles: ['PHARMACIST'] },
+      { label: 'Deliveries', icon: Truck, path: '/app/deliveries', permission: 'delivery:view' },
     ],
   },
    {

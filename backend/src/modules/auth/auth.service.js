@@ -13,7 +13,7 @@ import { mapUser, mapUserSummary, mapPatientSettings } from '../../utils/seriali
 import { cacheRemember, cacheGet, cacheSet, cacheDelKey } from '../../services/redis.service.js';
 import { SYSTEM_ROLES, isCatalogPermission, PERMISSION_CATALOG } from '../../permissions.js';
 import { verifyTotp, hashBackupCode, generateSecret, generateBackupCodes } from '../../services/totp.service.js';
-import { sendVerificationEmail } from '../../services/mail.service.js';
+import { sendVerificationEmail, sendInvitationEmail } from '../../services/mail.service.js';
 
 function refreshSessionKey(tokenHash) {
   return `auth:refresh:${tokenHash}`;
@@ -295,6 +295,7 @@ export async function googleSignIn(idToken, ipAddress, userAgent) {
       // Link Google auth to the existing local account. That account already
       // passed registration, so no new verification step is introduced.
       user = await authRepository.linkGoogleAuth(user.id, googleId);
+      await authRepository.createPatientProfile(user.id, {});
     } else {
       // Create a brand-new patient account. It must verify its email address
       // before it can sign in.
@@ -956,6 +957,37 @@ function serializeInvitation(invitation) {
   return safe;
 }
 
+function buildInviteUrl(token) {
+  return `${env.PUBLIC_URL || 'http://localhost:5173'}/accept-invite?token=${token}`;
+}
+
+async function dispatchInvitationEmail(invitation, inviteUrl) {
+  const sendResult = await sendInvitationEmail({
+    to: invitation.email,
+    name: invitation.full_name,
+    role: invitation.role,
+    inviteUrl,
+    expiresAt: invitation.expires_at,
+  });
+
+  const skipped = Boolean(sendResult?.skipped);
+  const failed = Boolean(sendResult?.failed);
+  const emailSent = !skipped && !failed;
+  const error = failed ? sendResult.reason : skipped ? 'SMTP not configured' : null;
+
+  const updated = await authRepository.recordInvitationEmail(invitation.id, { sent: emailSent, error });
+
+  if (failed) {
+    console.error(
+      `[auth] Invitation email could not be delivered to ${invitation.email}: ${sendResult.reason}`
+    );
+  } else if (skipped) {
+    console.log(`[auth] SMTP not configured. Invitation link for ${invitation.email}: ${inviteUrl}`);
+  }
+
+  return { invitation: updated || invitation, emailSent };
+}
+
 export async function createInvitation(inviteData, actorId, ipAddress, userAgent) {
   const { email, role, fullName } = inviteData;
 
@@ -990,9 +1022,13 @@ export async function createInvitation(inviteData, actorId, ipAddress, userAgent
     userAgent,
   });
 
-  const result = serializeInvitation(invitation);
-  if (env.NODE_ENV === 'development') {
-    result.inviteUrl = `${env.PUBLIC_URL || 'http://localhost:5173'}/accept-invite?token=${inviteToken}`;
+  const inviteUrl = buildInviteUrl(inviteToken);
+  const delivery = await dispatchInvitationEmail(invitation, inviteUrl);
+
+  const result = serializeInvitation(delivery.invitation);
+  result.emailSent = delivery.emailSent;
+  if (env.NODE_ENV === 'development' || !delivery.emailSent) {
+    result.inviteUrl = inviteUrl;
   }
   return result;
 }
@@ -1001,7 +1037,11 @@ export async function acceptInvitation(token, userData, ipAddress, userAgent) {
   await authRepository.expireStaleInvitations();
 
   const invitation = await authRepository.findInvitationByTokenHash(hashToken(token));
-  if (!invitation) throw new UnauthorizedError('Invitation is invalid');
+  if (!invitation) {
+    throw new UnauthorizedError(
+      'This invitation link is invalid or has been replaced by a newer invitation email. Check your most recent invitation email, or contact your administrator for a new link.'
+    );
+  }
 
   if (invitation.status !== INVITATION_STATUS.PENDING) {
     throw new ConflictError(
@@ -1115,11 +1155,40 @@ export async function resendInvitation(invitationId, actorId, ipAddress, userAge
     userAgent,
   });
 
-  const result = serializeInvitation(updated);
-  if (env.NODE_ENV === 'development') {
-    result.inviteUrl = `${env.PUBLIC_URL || 'http://localhost:5173'}/accept-invite?token=${newToken}`;
+  const inviteUrl = buildInviteUrl(newToken);
+  const delivery = await dispatchInvitationEmail(updated, inviteUrl);
+
+  const result = serializeInvitation(delivery.invitation);
+  result.emailSent = delivery.emailSent;
+  if (env.NODE_ENV === 'development' || !delivery.emailSent) {
+    result.inviteUrl = inviteUrl;
   }
   return result;
+}
+
+export async function deleteInvitation(invitationId, actorId, ipAddress, userAgent) {
+  const existing = await authRepository.findInvitationById(invitationId);
+  if (!existing) throw new NotFoundError('Invitation not found');
+
+  if (existing.status === INVITATION_STATUS.PENDING) {
+    throw new ConflictError('Revoke the invitation before deleting it');
+  }
+
+  const deleted = await authRepository.deleteInvitation(invitationId);
+  if (!deleted) throw new NotFoundError('Invitation not found');
+
+  await createAuditLog({
+    userId: actorId,
+    action: AUDIT_ACTION.DELETE,
+    entity: AUDIT_ENTITY.USER,
+    entityId: invitationId,
+    description: `Deleted ${existing.status.toLowerCase()} invitation for ${existing.email}`,
+    metadata: { email: existing.email, role: existing.role, status: existing.status },
+    ipAddress,
+    userAgent,
+  });
+
+  return { deleted: true, id: invitationId };
 }
 
 // ---------------------------------------------------------------------------

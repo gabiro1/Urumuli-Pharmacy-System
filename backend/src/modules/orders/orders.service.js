@@ -46,6 +46,25 @@ const assertOwner = async (order,user) => {
   const identityId=user.patientIdentityId||(user.userId?(await repo.findIdentityByUser(user.userId))?.id:null);
   if(!staff && order.patient_identity_id!==identityId) throw new ForbiddenError('You cannot access this order');
 };
+
+/**
+ * Draw down stock for every active reservation on an order and write the
+ * matching OUTBOUND stock movements. Shared with the delivery workflow so a
+ * parcel confirmed as delivered draws stock down exactly the way a manual
+ * completion does, and only ever once.
+ */
+export async function consumeReservedStock(client, orderId, user) {
+  const reservations=(await client.query(`SELECT ir.*,m.current_stock FROM inventory_reservations ir JOIN medicines m ON m.id=ir.medicine_id WHERE ir.order_item_id IN (SELECT id FROM order_items WHERE order_id=$1) AND ir.status='ACTIVE' FOR UPDATE`,[orderId])).rows;
+  for(const r of reservations){
+    if(r.current_stock<r.quantity)throw new ValidationError('Inventory changed before fulfilment; completion is blocked');
+    const next=r.current_stock-r.quantity;
+    await client.query('UPDATE medicines SET current_stock=$1 WHERE id=$2',[next,r.medicine_id]);
+    await client.query(`INSERT INTO stock_movements(medicine_id,movement_type,quantity,previous_stock,new_stock,reference_type,reference_id,notes,performed_by) VALUES($1,'OUTBOUND',$2,$3,$4,'ORDER',$5,'Order completion',$6)`,[r.medicine_id,r.quantity,r.current_stock,next,orderId,user?.userId||null]);
+    await client.query(`UPDATE inventory_reservations SET status='CONSUMED',released_at=NOW() WHERE id=$1`,[r.id]);
+  }
+  return reservations.length;
+}
+
 export async function getOrder(id,user){ const order=await repo.findOrder(id); if(!order)throw new NotFoundError('Order',id);await assertOwner(order,user);return {...order,items:await repo.getOrderItems(order.id),instructions:await repo.getInstructions(order.id),history:await repo.getHistory(order.id),prescriptionFiles:await repo.getPrescriptionFiles(order.id)}; }
 export const listMyOrders = async (user) => { const identityId=user.patientIdentityId||(await repo.findIdentityByUser(user.userId))?.id;if(!identityId)throw new ForbiddenError('Verified patient identity required');return repo.listOwnedOrders(identityId); };
 export const listQueue = (params) => repo.listQueue(params);
@@ -100,7 +119,7 @@ export async function transitionOrder(id,target,user,{reason,internalNote}={}){
     const reasonRequired=['CLARIFICATION_REQUIRED','PRESCRIBER_CLARIFICATION_REQUIRED','REJECTED_BY_PHARMACIST','CANCELLED'].includes(target);if(reasonRequired&&!reason?.trim())throw new ValidationError('A reason is required for this decision');
     if(target==='APPROVED_AWAITING_PATIENT_CONFIRMATION'){const file=(await client.query(`SELECT pf.id FROM prescription_files pf JOIN prescriptions p ON p.id=pf.prescription_id WHERE p.order_id=$1 LIMIT 1`,[id])).rows[0];if(!file)throw new ValidationError('The original prescription must be available before approval');const missing=(await client.query(`SELECT oi.id FROM order_items oi LEFT JOIN medication_instructions mi ON mi.order_item_id=oi.id AND mi.status='VERIFIED' WHERE oi.order_id=$1 AND oi.prescription_required=true AND mi.id IS NULL`,[id])).rows;if(missing.length)throw new ValidationError('Every prescription medicine requires verified directions before approval');const items=(await client.query('SELECT * FROM order_items WHERE order_id=$1 FOR UPDATE',[id])).rows;for(const item of items){const med=(await client.query('SELECT name,current_stock FROM medicines WHERE id=$1 FOR UPDATE',[item.medicine_id])).rows[0];const reserved=(await client.query(`SELECT COALESCE(SUM(quantity),0)::int total FROM inventory_reservations WHERE medicine_id=$1 AND status='ACTIVE' AND expires_at>NOW()`,[item.medicine_id])).rows[0].total;if(med.current_stock-reserved<item.requested_quantity)throw new ValidationError(`${med.name} is unavailable in the requested quantity`);await client.query(`UPDATE order_items SET approved_quantity=requested_quantity,approval_status='APPROVED' WHERE id=$1`,[item.id]);await client.query(`INSERT INTO inventory_reservations(order_item_id,medicine_id,quantity,expires_at) VALUES($1,$2,$3,NOW()+($4||' minutes')::interval) ON CONFLICT(order_item_id) DO UPDATE SET quantity=EXCLUDED.quantity,status='ACTIVE',expires_at=EXCLUDED.expires_at,released_at=NULL`,[item.id,item.medicine_id,item.requested_quantity,env.RESERVATION_MINUTES]);}}
     if(['CANCELLED','REJECTED_BY_PHARMACIST','REFUNDED'].includes(target))await client.query(`UPDATE inventory_reservations SET status='RELEASED',released_at=NOW() WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id=$1) AND status='ACTIVE'`,[id]);
-    if(target==='COMPLETED'){const reservations=(await client.query(`SELECT ir.*,m.current_stock FROM inventory_reservations ir JOIN medicines m ON m.id=ir.medicine_id WHERE ir.order_item_id IN (SELECT id FROM order_items WHERE order_id=$1) AND ir.status='ACTIVE' FOR UPDATE`,[id])).rows;for(const r of reservations){if(r.current_stock<r.quantity)throw new ValidationError('Inventory changed before fulfilment; completion is blocked');const next=r.current_stock-r.quantity;await client.query('UPDATE medicines SET current_stock=$1 WHERE id=$2',[next,r.medicine_id]);await client.query(`INSERT INTO stock_movements(medicine_id,movement_type,quantity,previous_stock,new_stock,reference_type,reference_id,notes,performed_by) VALUES($1,'OUTBOUND',$2,$3,$4,'ORDER',$5,'Order completion',$6)`,[r.medicine_id,r.quantity,r.current_stock,next,id,user.userId]);await client.query(`UPDATE inventory_reservations SET status='CONSUMED',released_at=NOW() WHERE id=$1`,[r.id]);}}
+    if(target==='COMPLETED'){await consumeReservedStock(client,id,user);}
     const fulfilment = fulfilmentFor(target, locked.fulfilment_method);
     if (target === 'REFUNDED') fulfilment.paymentStatus = 'REFUNDED';
     const updated=await repo.updateOrderStatus(client,id,target,['ADMIN','MANAGER','PHARMACIST'].includes(user.role)?user.userId:null,fulfilment);await repo.addHistory(client,{orderId:id,previousStatus:locked.status,newStatus:target,actorId:user.userId,actorRole:user.role,reason,internalNote,metadata:{}});return updated;})

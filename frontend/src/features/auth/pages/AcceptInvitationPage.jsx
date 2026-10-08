@@ -124,8 +124,9 @@ export default function AcceptInvitationPage() {
           <div className="p-3 rounded-lg bg-primary/5 border border-primary/10 flex items-start gap-2 text-sm text-muted-foreground">
             <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
             <p>
-              Your invitation is valid for 48 hours. If it has expired, contact your
-              administrator for a new one.
+              Your invitation is valid for 48 hours. Only the most recent invitation
+              email works — if you asked for a new link, older ones stop working.
+              If it has expired, contact your administrator for a new one.
             </p>
           </div>
 

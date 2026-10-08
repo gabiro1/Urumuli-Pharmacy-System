@@ -1,7 +1,7 @@
 import { query } from '../../config/database.js';
 
 export async function getConsents(patientId) {
-  const { rows } = await query(
+  const rows = await query(
     `SELECT * FROM patient_consents WHERE patient_id = $1 ORDER BY consent_type`,
     [patientId]
   );
@@ -9,7 +9,7 @@ export async function getConsents(patientId) {
 }
 
 export async function getConsent(patientId, consentType) {
-  const { rows } = await query(
+  const rows = await query(
     `SELECT * FROM patient_consents WHERE patient_id = $1 AND consent_type = $2`,
     [patientId, consentType]
   );
@@ -35,7 +35,7 @@ export async function upsertConsent({ patientId, consentType, granted, ipAddress
 }
 
 export async function hasConsent(patientId, consentType) {
-  const { rows } = await query(
+  const rows = await query(
     `SELECT granted FROM patient_consents WHERE patient_id = $1 AND consent_type = $2 AND granted = TRUE`,
     [patientId, consentType]
   );

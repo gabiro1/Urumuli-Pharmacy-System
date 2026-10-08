@@ -9,8 +9,8 @@ export async function listReminders(patientId, { status, page = 1, limit = 20 } 
   const offset = (page - 1) * limit;
 
   const countResult = await query(`SELECT COUNT(*) FROM refill_reminders rr ${where}`, params);
-  const total = parseInt(countResult.rows[0].count, 10);
-  const { rows } = await query(
+  const total = parseInt(countResult[0].count, 10);
+  const rows = await query(
     `SELECT rr.*, m.name AS medicine_name FROM refill_reminders rr
      LEFT JOIN medicines m ON m.id = rr.medicine_id
      ${where} ORDER BY rr.next_refill_date ASC NULLS LAST
@@ -21,7 +21,7 @@ export async function listReminders(patientId, { status, page = 1, limit = 20 } 
 }
 
 export async function getDueReminders() {
-  const { rows } = await query(
+  const rows = await query(
     `SELECT rr.*, m.name AS medicine_name, u.full_name AS patient_name, u.email AS patient_email
      FROM refill_reminders rr
      LEFT JOIN medicines m ON m.id = rr.medicine_id

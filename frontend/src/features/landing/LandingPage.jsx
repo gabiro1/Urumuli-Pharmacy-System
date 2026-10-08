@@ -296,7 +296,7 @@ export default function LandingPage() {
           {
             text: (
               <>
-                Create patient account
+                Create Account
                 <Users className="ml-2 h-4 w-4" />
               </>
             ),
@@ -683,7 +683,7 @@ export default function LandingPage() {
                 onClick={() => navigate('/patient/register')}
                 className="h-12 px-10 text-base font-medium gap-2 group"
               >
-                Create patient account
+                Create Account
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </Button>
               <Button
